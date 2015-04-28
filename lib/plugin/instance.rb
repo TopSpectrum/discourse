@@ -31,13 +31,6 @@ class Plugin::Instance
   def initialize(metadata=nil, path=nil)
     @metadata = metadata
     @path = path
-
-    if @path
-      # Automatically include all ES6 JS and hbs files
-      root_path = "#{File.dirname(@path)}/assets/javascripts"
-      DiscoursePluginRegistry.register_glob(root_path, 'js.es6')
-      DiscoursePluginRegistry.register_glob(root_path, 'hbs')
-    end
   end
 
   def add_admin_route(label, location)
@@ -78,12 +71,12 @@ class Plugin::Instance
   end
 
   # Add validation method but check that the plugin is enabled
-  def validate(klass, attr, &block)
+  def validate(klass, name, &block)
     klass = klass.to_s.classify.constantize
-    klass.send(:define_method, attr, &block)
+    klass.send(:define_method, name, &block)
 
     plugin = self
-    klass.validate(attr, if: -> { plugin.enabled? })
+    klass.validate(name, if: -> { plugin.enabled? })
   end
 
   # will make sure all the assets this plugin needs are registered
@@ -216,6 +209,14 @@ class Plugin::Instance
   # this allows us to present information about a plugin in the UI
   # prior to activations
   def activate!
+
+    if @path
+      # Automatically include all ES6 JS and hbs files
+      root_path = "#{File.dirname(@path)}/assets/javascripts"
+      DiscoursePluginRegistry.register_glob(root_path, 'js.es6')
+      DiscoursePluginRegistry.register_glob(root_path, 'hbs')
+    end
+
     self.instance_eval File.read(path), path
     if auto_assets = generate_automatic_assets!
       assets.concat auto_assets.map{|a| [a]}

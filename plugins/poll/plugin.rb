@@ -14,6 +14,11 @@ VOTES_CUSTOM_FIELD ||= "polls-votes".freeze
 
 after_initialize do
 
+  # remove "Vote Now!" & "Show Results" links in emails
+  Email::Styles.register_plugin_style do |fragment|
+    fragment.css(".poll a.cast-votes, .poll a.toggle-results").each(&:remove)
+  end
+
   module ::DiscoursePoll
     class Engine < ::Rails::Engine
       engine_name PLUGIN_NAME
@@ -64,9 +69,9 @@ after_initialize do
 
         post.custom_fields[POLLS_CUSTOM_FIELD] = polls
         post.custom_fields["#{VOTES_CUSTOM_FIELD}-#{user_id}"] = votes
-        post.save_custom_fields
+        post.save_custom_fields(true)
 
-        DiscourseBus.publish("/polls/#{post_id}", { poll: poll })
+        DiscourseBus.publish("/polls/#{post_id}", { polls: polls })
 
         render json: { poll: poll, vote: options }
       end
@@ -97,10 +102,9 @@ after_initialize do
 
         polls[poll_name]["status"] = status
 
-        post.custom_fields[POLLS_CUSTOM_FIELD] = polls
-        post.save_custom_fields
+        post.save_custom_fields(true)
 
-        DiscourseBus.publish("/polls/#{post_id}", { poll: polls[poll_name] })
+        DiscourseBus.publish("/polls/#{post_id}", { polls: polls })
 
         render json: { poll: polls[poll_name] }
       end
@@ -120,7 +124,6 @@ after_initialize do
   Post.class_eval do
     attr_accessor :polls
 
-    # save the polls when the post is created
     after_save do
       next if self.polls.blank? || !self.polls.is_a?(Hash)
 
@@ -129,7 +132,7 @@ after_initialize do
 
       DistributedMutex.synchronize("#{PLUGIN_NAME}-#{post.id}") do
         post.custom_fields[POLLS_CUSTOM_FIELD] = polls
-        post.save_custom_fields
+        post.save_custom_fields(true)
       end
     end
   end
@@ -137,7 +140,7 @@ after_initialize do
   DATA_PREFIX ||= "data-poll-".freeze
   DEFAULT_POLL_NAME ||= "poll".freeze
 
-  validate(:post, :polls) do
+  validate(:post, :validate_polls) do
     # only care when raw has changed!
     return unless self.raw_changed?
 
@@ -200,8 +203,8 @@ after_initialize do
       polls[poll["name"]] = poll
     end
 
-    # are we updating a post outside the 5-minute edit window?
-    if self.id.present? && self.created_at < 5.minutes.ago
+    # are we updating a post?
+    if self.id.present?
       post = self
       DistributedMutex.synchronize("#{PLUGIN_NAME}-#{post.id}") do
         # load previous polls
@@ -211,43 +214,54 @@ after_initialize do
         if polls.keys != previous_polls.keys ||
            polls.values.map { |p| p["options"] } != previous_polls.values.map { |p| p["options"] }
 
-          # cannot add/remove/change/re-order polls
-          if polls.keys != previous_polls.keys
-            post.errors.add(:base, I18n.t("poll.cannot_change_polls_after_5_minutes"))
-            return
+          # outside the 5-minute edit window?
+          if post.created_at < 5.minutes.ago
+            # cannot add/remove/change/re-order polls
+            if polls.keys != previous_polls.keys
+              post.errors.add(:base, I18n.t("poll.cannot_change_polls_after_5_minutes"))
+              return
+            end
+
+            # deal with option changes
+            if User.staff.pluck(:id).include?(post.last_editor_id)
+              # staff can only edit options
+              polls.each_key do |poll_name|
+                if polls[poll_name]["options"].size != previous_polls[poll_name]["options"].size
+                  post.errors.add(:base, I18n.t("poll.staff_cannot_add_or_remove_options_after_5_minutes"))
+                  return
+                end
+              end
+            else
+              # OP cannot change polls
+              post.errors.add(:base, I18n.t("poll.cannot_change_polls_after_5_minutes"))
+              return
+            end
           end
 
-          # deal with option changes
-          if User.staff.pluck(:id).include?(post.last_editor_id)
-            # staff can only edit options
-            polls.each_key do |poll_name|
-              if polls[poll_name]["options"].size != previous_polls[poll_name]["options"].size
-                post.errors.add(:base, I18n.t("poll.staff_cannot_add_or_remove_options_after_5_minutes"))
-                return
-              end
+          # merge votes when same number of options
+          polls.each_key do |poll_name|
+            next unless previous_polls.has_key?(poll_name)
+            next unless polls[poll_name]["options"].size == previous_polls[poll_name]["options"].size
+
+            polls[poll_name]["total_votes"] = previous_polls[poll_name]["total_votes"]
+            for o in 0...polls[poll_name]["options"].size
+              polls[poll_name]["options"][o]["votes"] = previous_polls[poll_name]["options"][o]["votes"]
             end
-            # merge votes
-            polls.each_key do |poll_name|
-              polls[poll_name]["total_votes"] = previous_polls[poll_name]["total_votes"]
-              for o in 0...polls[poll_name]["options"].size
-                polls[poll_name]["options"][o]["votes"] = previous_polls[poll_name]["options"][o]["votes"]
-              end
-            end
-          else
-            # OP cannot change polls after 5 minutes
-            post.errors.add(:base, I18n.t("poll.cannot_change_polls_after_5_minutes"))
-            return
           end
+
+          # immediately store the polls
+          post.custom_fields[POLLS_CUSTOM_FIELD] = polls
+          post.save_custom_fields(true)
+
+          # publish the changes
+          DiscourseBus.publish("/polls/#{post.id}", { polls: polls })
         end
-
-        # immediately store the polls
-        post.custom_fields[POLLS_CUSTOM_FIELD] = polls
-        post.save_custom_fields
       end
     else
-      # polls will be saved once we have a post id
       self.polls = polls
     end
+
+    true
   end
 
   Post.register_custom_field_type(POLLS_CUSTOM_FIELD, :json)
@@ -257,6 +271,12 @@ after_initialize do
     whitelisted = [POLLS_CUSTOM_FIELD]
     whitelisted << "#{VOTES_CUSTOM_FIELD}-#{user.id}" if user
     whitelisted
+  end
+
+  # tells the front-end we have a poll for that post
+  on(:post_created) do |post|
+    next if post.is_first_post? || post.custom_fields[POLLS_CUSTOM_FIELD].blank?
+    DiscourseBus.publish("/polls", { post_id: post.id })
   end
 
   add_to_serializer(:post, :polls, false) { post_custom_fields[POLLS_CUSTOM_FIELD] }

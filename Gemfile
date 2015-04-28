@@ -71,12 +71,12 @@ end
 if rails_master?
   gem 'arel', git: 'https://github.com/rails/arel.git'
   gem 'rails', git: 'https://github.com/rails/rails.git'
-  gem 'rails-observers', git: 'https://github.com/SamSaffron/rails-observers.git'
+  gem 'rails-observers', git: 'https://github.com/rails/rails-observers.git'
   gem 'seed-fu', git: 'https://github.com/SamSaffron/seed-fu.git', branch: 'discourse'
 else
-  gem 'seed-fu', '~> 2.3.3'
-  gem 'rails'
+  gem 'rails', '~> 4.1.10'
   gem 'rails-observers'
+  gem 'seed-fu', '~> 2.3.3'
 end
 
 gem 'actionpack-action_caching'
@@ -147,6 +147,7 @@ gem 'omniauth-google-oauth2'
 gem 'oj'
 gem 'pg'
 gem 'pry-rails', require: false
+gem 'r2', '~> 0.2.5', require: false
 gem 'rake'
 
 
@@ -186,8 +187,7 @@ group :test do
 end
 
 group :test, :development do
-  # while upgrading to 3
-  gem 'rspec', '2.99.0'
+  gem 'rspec', '~> 3.2.0'
   gem 'mock_redis'
   gem 'listen', '0.7.3', require: false
   gem 'certified', require: false
