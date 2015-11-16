@@ -10,3 +10,9 @@ Discourse::Application.load_tasks
 # PostgreSQL configuations when trying to create structure.sql
 Rake::Task["db:structure:dump"].clear if Rails.env.production?
 
+begin
+  require 'vlad'
+  Vlad.load :scm => :git
+rescue LoadError
+  # do nothing
+end
