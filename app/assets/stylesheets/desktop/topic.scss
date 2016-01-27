@@ -58,7 +58,7 @@
 }
 
 .private-message-glyph {
-  color: scale-color($primary, $lightness: 75%);
+  color: dark-light-choose(scale-color($primary, $lightness: 75%), scale-color($secondary, $lightness: 25%));
   float: left;
   margin: 0 5px 0 0;
 }
@@ -66,7 +66,7 @@
 
 a.reply-new {
   margin-top: 3px;
-  color: scale-color($primary, $lightness: 50%);
+  color: dark-light-choose(scale-color($primary, $lightness: 50%), scale-color($secondary, $lightness: 50%));
   i {
     margin-right: 3px;
     background: $secondary;
@@ -80,7 +80,7 @@ a.reply-new {
 a:hover.reply-new {
   color: $tertiary;
   i {
-    background: dark-light-diff($tertiary, $secondary, 90%, -65%);
+    background: dark-light-diff($tertiary, $secondary, 85%, -65%);
   }
 }
 
@@ -113,7 +113,6 @@ a:hover.reply-new {
   width: 0;
   bottom: 0;
   z-index: 500;
-  outline: 1px solid transparent;
   &.docked {
     position: absolute;
     bottom: -70px;
@@ -121,7 +120,7 @@ a:hover.reply-new {
 }
 
 #topic-progress-expanded {
-  border: 1px solid scale-color-diff();
+  border: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
   padding: 5px;
   background: $secondary;
   @include box-shadow(0 0px 2px rgba(0,0,0, .2));
@@ -162,13 +161,14 @@ a:hover.reply-new {
 
 #topic-progress {
   position: relative;
-  left: 345px;
+  left: 340px;
   &.hidden {
     display: none;
   }
-  border: none;
-  background-color: scale-color-diff();
-  color: scale-color($primary, $lightness: 50%);
+  background-color: $secondary;
+  color: $tertiary;
+  border: 1px solid dark-light-diff($tertiary, $secondary, 85%, -65%);
+  border-bottom: none;
   width: 145px;
   height: 34px;
 
@@ -201,8 +201,8 @@ a:hover.reply-new {
     top: 0;
     bottom: 0;
     width: 0;
-    border-right: 1px solid  scale-color-diff();
-    background-color:  desaturate(dark-light-diff($success, $secondary, 60%, -35%), 30%);
+    border-right: 1px solid  dark-light-diff($tertiary, $secondary, 85%, -65%);
+    background-color:  dark-light-diff($tertiary, $secondary, 85%, -65%);
     transition: width .75s;
 
   }
@@ -228,40 +228,36 @@ a:hover.reply-new {
 }
 
 @media all
-and (max-width : 940px) {
+and (max-width : 1000px) {
 
   #topic-progress, #topic-progress-expanded {
-    left: 295px;
+      right: 0;
+      left: 0;
     }
-}
-
-
-@media all
-and (max-width : 870px) {
-
-  #topic-progress, #topic-progress-expanded {
-    left: 210px;
-    }
-
-}
-
-
-@media all
-and (max-width : 724px) {
 
   #topic-progress-wrapper {
-    right: 0;
-    #topic-progress, #topic-progress-expanded { left: auto; right: 145px;  }
+    right: 160px;
   }
 
+  #topic-progress-wrapper.docked {
+    right: 152px;
+  }
+
+  #topic-footer-main-buttons {
+    max-width: 70%;
+  }
 }
+
 
 @media all
 and (max-width : 485px) {
 
   #topic-progress-wrapper.docked {
     display: none;
-    }
+  }
 
 
+  #topic-footer-main-buttons {
+    max-width: 100%;
+  }
 }

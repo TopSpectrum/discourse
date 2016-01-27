@@ -1,19 +1,38 @@
+# encoding: utf-8
+# This file contains content for the client portion of the poll plugin, sent out
+# to the Javascript app.
+#
+# To work with us on translations, see:
+# https://www.transifex.com/projects/p/discourse-org/
+#
+# This is a "source" file, which is used by Transifex to get translations for other languages.
+# After this file is changed, it needs to be pushed by a maintainer to Transifex:
+#
+#   tx push -s
+#
+# Read more here: https://meta.discourse.org/t/contribute-a-translation-to-discourse/14882
+#
+# To validate this YAML file after you change it, please paste it into
+# http://yamllint.com/
+
 en:
   js:
     poll:
+      voters:
+        one: "voter"
+        other: "voters"
       total_votes:
-        zero: "No votes yet. Want to be the first?"
-        one: "There's only 1 vote."
-        other: "There are %{count} total votes."
+        one: "total vote"
+        other: "total votes"
 
       average_rating: "Average rating: <strong>%{average}</strong>."
 
       multiple:
         help:
-          at_least_min_options: "You may choose at least %{count} options."
-          up_to_max_options: "You may choose up to %{count} options."
-          x_options: "You may choose %{count} options."
-          between_min_and_max_options: "You may choose between %{min} and %{max} options."
+          at_least_min_options: "You must choose at least <strong>%{count}</strong> options."
+          up_to_max_options: "You may choose up to <strong>%{count}</strong> options."
+          x_options: "You must choose <strong>%{count}</strong> options."
+          between_min_and_max_options: "You may choose between <strong>%{min}</strong> and <strong>%{max}</strong> options."
 
       cast-votes:
         title: "Cast your votes"

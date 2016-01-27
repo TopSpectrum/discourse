@@ -1,4 +1,4 @@
-import round from "discourse/plugins/poll/lib/round";
+import round from "discourse/lib/round";
 
 export default Em.Component.extend({
   tagName: "span",
@@ -12,8 +12,9 @@ export default Em.Component.extend({
   }.property("poll.options.@each.{html,votes}"),
 
   average: function() {
-    return round(this.get("totalScore") / this.get("poll.total_votes"), -2);
-  }.property("totalScore", "poll.total_votes"),
+    const voters = this.get("poll.voters");
+    return voters === 0 ? 0 : round(this.get("totalScore") / voters, -2);
+  }.property("totalScore", "poll.voters"),
 
   averageRating: function() {
     return I18n.t("poll.average_rating", { average: this.get("average") });

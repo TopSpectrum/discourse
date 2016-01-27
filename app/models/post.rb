@@ -6,6 +6,7 @@ require_dependency 'enum'
 require_dependency 'post_analyzer'
 require_dependency 'validators/post_validator'
 require_dependency 'plugin/filter'
+require_dependency 'email_cook'
 
 require 'archetype'
 require 'digest/sha1'
@@ -36,6 +37,7 @@ class Post < ActiveRecord::Base
   has_many :uploads, through: :post_uploads
 
   has_one :post_search_data
+  has_one :post_stat
 
   has_many :post_details
 
@@ -59,6 +61,7 @@ class Post < ActiveRecord::Base
   scope :private_posts, -> { joins(:topic).where('topics.archetype = ?', Archetype.private_message) }
   scope :with_topic_subtype, ->(subtype) { joins(:topic).where('topics.subtype = ?', subtype) }
   scope :visible, -> { joins(:topic).where('topics.visible = true').where(hidden: false) }
+  scope :secured, lambda { |guardian| where('posts.post_type in (?)', Topic.visible_post_types(guardian && guardian.user))}
 
   delegate :username, to: :user
 
@@ -72,11 +75,11 @@ class Post < ActiveRecord::Base
   end
 
   def self.types
-    @types ||= Enum.new(:regular, :moderator_action)
+    @types ||= Enum.new(:regular, :moderator_action, :small_action, :whisper)
   end
 
   def self.cook_methods
-    @cook_methods ||= Enum.new(:regular, :raw_html)
+    @cook_methods ||= Enum.new(:regular, :raw_html, :email)
   end
 
   def self.find_by_detail(key, value)
@@ -88,21 +91,30 @@ class Post < ActiveRecord::Base
   end
 
   def limit_posts_per_day
-    if user.first_day_user? && post_number > 1
+    if user.first_day_user? && post_number && post_number > 1
       RateLimiter.new(user, "first-day-replies-per-day", SiteSetting.max_replies_in_first_day, 1.day.to_i)
     end
   end
 
   def publish_change_to_clients!(type)
-    # special failsafe for posts missing topics
-    # consistency checks should fix, but message
+    # special failsafe for posts missing topics consistency checks should fix, but message
     # is safe to skip
-    DiscourseBus.publish("/topic/#{topic_id}", {
-        id: id,
-        post_number: post_number,
-        updated_at: Time.now,
-        type: type
-    }, group_ids: topic.secure_group_ids) if topic
+    return unless topic
+
+    channel = "/topic/#{topic_id}"
+    msg = {
+      id: id,
+      post_number: post_number,
+      updated_at: Time.now,
+      type: type
+    }
+
+    if Topic.visible_post_types.include?(post_type)
+      MessageBus.publish(channel, msg, group_ids: topic.secure_group_ids)
+    else
+      user_ids = User.where('admin or moderator or id = ?', user_id).pluck(:id)
+      MessageBus.publish(channel, msg, user_ids: user_ids)
+    end
   end
 
   def trash!(trashed_by=nil)
@@ -161,23 +173,29 @@ class Post < ActiveRecord::Base
     # case we can skip the rendering pipeline.
     return raw if cook_method == Post.cook_methods[:raw_html]
 
-    # Default is to cook posts
-    cooked = if !self.user || SiteSetting.tl3_links_no_follow || !self.user.has_trust_level?(TrustLevel[3])
-               post_analyzer.cook(*args)
-             else
-               # At trust level 3, we don't apply nofollow to links
-               cloned = args.dup
-               cloned[1] ||= {}
-               cloned[1][:omit_nofollow] = true
-               post_analyzer.cook(*cloned)
-             end
+    cooked = nil
+    if cook_method == Post.cook_methods[:email]
+      cooked = EmailCook.new(raw).cook
+    else
+      cooked = if !self.user || SiteSetting.tl3_links_no_follow || !self.user.has_trust_level?(TrustLevel[3])
+                 post_analyzer.cook(*args)
+               else
+                 # At trust level 3, we don't apply nofollow to links
+                 cloned = args.dup
+                 cloned[1] ||= {}
+                 cloned[1][:omit_nofollow] = true
+                 post_analyzer.cook(*cloned)
+               end
+    end
 
     new_cooked = Plugin::Filter.apply(:after_post_cook, self, cooked)
 
-    if new_cooked != cooked && new_cooked.blank?
-      Rails.logger.warn("Plugin is blanking out post: #{self.url}\nraw: #{self.raw}")
-    elsif new_cooked.blank?
-      Rails.logger.warn("Blank post detected post: #{self.url}\nraw: #{self.raw}")
+    if post_type == Post.types[:regular]
+      if new_cooked != cooked && new_cooked.blank?
+        Rails.logger.warn("Plugin is blanking out post: #{self.url}\nraw: #{self.raw}")
+      elsif new_cooked.blank?
+        Rails.logger.warn("Blank post detected post: #{self.url}\nraw: #{self.raw}")
+      end
     end
 
     new_cooked
@@ -332,7 +350,11 @@ class Post < ActiveRecord::Base
   end
 
   def url
-    Post.url(topic.slug, topic.id, post_number)
+    if topic
+      Post.url(topic.slug, topic.id, post_number)
+    else
+      "/404"
+    end
   end
 
   def self.url(slug, topic_id, post_number)
@@ -395,7 +417,7 @@ class Post < ActiveRecord::Base
     return if user_id == new_user.id
 
     edit_reason = I18n.t('change_owner.post_revision_text',
-      old_user: self.user.username_lower,
+      old_user: (self.user.username_lower rescue nil) || I18n.t('change_owner.deleted_user'),
       new_user: new_user.username_lower
     )
 
@@ -486,18 +508,20 @@ class Post < ActiveRecord::Base
     args[:image_sizes] = image_sizes if image_sizes.present?
     args[:invalidate_oneboxes] = true if invalidate_oneboxes.present?
     Jobs.enqueue(:process_post, args)
+    DiscourseEvent.trigger(:after_trigger_post_process, self)
   end
 
-  def self.public_posts_count_per_day(start_date, end_date)
-    public_posts.where('posts.created_at >= ? AND posts.created_at <= ?', start_date, end_date).group('date(posts.created_at)').order('date(posts.created_at)').count
+  def self.public_posts_count_per_day(start_date, end_date, category_id=nil)
+    result = public_posts.where('posts.created_at >= ? AND posts.created_at <= ?', start_date, end_date)
+    result = result.where('topics.category_id = ?', category_id) if category_id
+    result.group('date(posts.created_at)').order('date(posts.created_at)').count
   end
 
   def self.private_messages_count_per_day(since_days_ago, topic_subtype)
     private_posts.with_topic_subtype(topic_subtype).where('posts.created_at > ?', since_days_ago.days.ago).group('date(posts.created_at)').order('date(posts.created_at)').count
   end
 
-
-  def reply_history(max_replies=100)
+  def reply_history(max_replies=100, guardian=nil)
     post_ids = Post.exec_sql("WITH RECURSIVE breadcrumb(id, reply_to_post_number) AS (
                               SELECT p.id, p.reply_to_post_number FROM posts AS p
                                 WHERE p.id = :post_id
@@ -513,7 +537,7 @@ class Post < ActiveRecord::Base
     # [1,2,3][-10,-1] => nil
     post_ids = (post_ids[(0-max_replies)..-1] || post_ids)
 
-    Post.where(id: post_ids).includes(:user, :topic).order(:id).to_a
+    Post.secured(guardian).where(id: post_ids).includes(:user, :topic).order(:id).to_a
   end
 
   def revert_to(number)
@@ -562,7 +586,9 @@ class Post < ActiveRecord::Base
     return if post.nil?
     post_reply = post.post_replies.new(reply_id: id)
     if post_reply.save
-      Post.where(id: post.id).update_all ['reply_count = reply_count + 1']
+      if Topic.visible_post_types.include?(self.post_type)
+        Post.where(id: post.id).update_all ['reply_count = reply_count + 1']
+      end
     end
   end
 
@@ -621,6 +647,7 @@ end
 #  via_email               :boolean          default(FALSE), not null
 #  raw_email               :text
 #  public_version          :integer          default(1), not null
+#  action_code             :string(255)
 #
 # Indexes
 #

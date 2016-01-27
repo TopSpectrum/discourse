@@ -40,7 +40,7 @@ class ImportScripts::Sfn < ImportScripts::Base
 
     @external_users = {}
 
-    CSV.foreach("/Users/zogstrip/Downloads/sfn.csv", col_sep: ";") do |row|
+    CSV.foreach("/Users/zogstrip/Desktop/sfn.csv", col_sep: ";") do |row|
       next unless @personify_id_to_contact_key.include?(row[0])
 
       id = @personify_id_to_contact_key[row[0]]
@@ -77,6 +77,7 @@ class ImportScripts::Sfn < ImportScripts::Base
       SQL
 
       break if users.size < 1
+      next if all_records_exist? :users, users.map {|u| u["id"].to_i}
 
       create_users(users, total: user_count, offset: offset) do |user|
         external_user = @external_users[user["id"]]
@@ -90,6 +91,7 @@ class ImportScripts::Sfn < ImportScripts::Base
           id: user["id"],
           email: email,
           name: full_name,
+          username: email.split("@")[0],
           bio_raw: bio,
           created_at: user["created_at"],
           post_create_action: proc do |newuser|
@@ -191,13 +193,13 @@ class ImportScripts::Sfn < ImportScripts::Base
     "{9613BAC2-229B-4563-9E1C-35C31CDDCE2F}" => 49, # "Students",
   }
 
-  # def import_categories
-  #   puts "", "importing categories..."
+  def import_categories
+    puts "", "importing categories..."
 
-  #   create_categories(NEW_CATEGORIES) do |category|
-  #     { id: category, name: category }
-  #   end
-  # end
+    create_categories(NEW_CATEGORIES) do |category|
+      { id: category, name: category }
+    end
+  end
 
   def import_topics
     puts "", "importing topics..."
@@ -230,6 +232,7 @@ class ImportScripts::Sfn < ImportScripts::Base
       SQL
 
       break if topics.size < 1
+      next if all_records_exist? :posts, topics.map {|t| t['id'].to_i}
 
       create_posts(topics, total: topic_count, offset: offset) do |topic|
         next unless category_id = CATEGORY_MAPPING[topic["category_id"]]
@@ -280,6 +283,8 @@ class ImportScripts::Sfn < ImportScripts::Base
       SQL
 
       break if posts.size < 1
+
+      next if all_records_exist? :posts, posts.map {|p| p['id'].to_i}
 
       create_posts(posts, total: posts_count, offset: offset) do |post|
         next unless parent = topic_lookup_from_imported_post_id(post["topic_id"])

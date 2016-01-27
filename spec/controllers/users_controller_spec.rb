@@ -321,21 +321,8 @@ describe UsersController do
 
     context 'enqueues mail' do
       it 'enqueues mail with admin email and sso enabled' do
-        SiteSetting.enable_sso = true
         Jobs.expects(:enqueue).with(:user_email, has_entries(type: :admin_login, user_id: admin.id))
         put :admin_login, email: admin.email
-      end
-
-      it 'does not enqueue mail with admin email and sso disabled' do
-        SiteSetting.enable_sso = false
-        Jobs.expects(:enqueue).never
-        put :admin_login, email: admin.email
-      end
-
-      it 'does not enqueue mail with normal user email and sso enabled' do
-        SiteSetting.enable_sso = true
-        Jobs.expects(:enqueue).never
-        put :admin_login, email: user.email
       end
     end
 
@@ -346,13 +333,13 @@ describe UsersController do
         expect(session[:current_user_id]).to be_blank
       end
 
-      it 'does not log in admin with valid token and SSO disabled' do
+      it 'does log in admin with valid token and SSO disabled' do
         SiteSetting.enable_sso = false
         token = admin.email_tokens.create(email: admin.email).token
 
         get :admin_login, token: token
         expect(response).to redirect_to('/')
-        expect(session[:current_user_id]).to be_blank
+        expect(session[:current_user_id]).to eq(admin.id)
       end
 
       it 'logs in admin with valid token and SSO enabled' do
@@ -610,6 +597,13 @@ describe UsersController do
 
     context 'when password param is missing' do
       let(:create_params) { {name: @user.name, username: @user.username, email: @user.email} }
+      include_examples 'failed signup'
+    end
+
+    context 'with a reserved username' do
+      let(:create_params) { {name: @user.name, username: 'Reserved', email: @user.email, password: "x" * 20} }
+      before { SiteSetting.reserved_usernames = 'a|reserved|b' }
+      after { SiteSetting.reserved_usernames = nil }
       include_examples 'failed signup'
     end
 
@@ -917,7 +911,7 @@ describe UsersController do
         user: invitee
       )
 
-      xhr :get, :invited, username: inviter.username, filter: 'billybob'
+      xhr :get, :invited, username: inviter.username, search: 'billybob'
 
       invites = JSON.parse(response.body)['invites']
       expect(invites.size).to eq(1)
@@ -939,7 +933,7 @@ describe UsersController do
         user: Fabricate(:user, username: 'jimtom')
       )
 
-      xhr :get, :invited, username: inviter.username, filter: 'billybob'
+      xhr :get, :invited, username: inviter.username, search: 'billybob'
 
       invites = JSON.parse(response.body)['invites']
       expect(invites.size).to eq(1)
@@ -952,7 +946,7 @@ describe UsersController do
           inviter = Fabricate(:user)
           Fabricate(:invite, invited_by: inviter)
 
-          xhr :get, :invited, username: inviter.username
+          xhr :get, :invited, username: inviter.username, filter: 'pending'
 
           invites = JSON.parse(response.body)['invites']
           expect(invites).to be_empty
@@ -986,7 +980,7 @@ describe UsersController do
                 with(inviter).returns(true)
             end
 
-            xhr :get, :invited, username: inviter.username
+            xhr :get, :invited, username: inviter.username, filter: 'pending'
 
             invites = JSON.parse(response.body)['invites']
             expect(invites.size).to eq(1)
@@ -1005,7 +999,7 @@ describe UsersController do
                 with(inviter).returns(false)
             end
 
-            xhr :get, :invited, username: inviter.username
+            xhr :get, :invited, username: inviter.username, filter: 'pending'
 
             json = JSON.parse(response.body)['invites']
             expect(json).to be_empty
@@ -1304,197 +1298,45 @@ describe UsersController do
     end
   end
 
-  describe '.upload_user_image' do
-
-    it 'raises an error when not logged in' do
-      expect { xhr :put, :upload_user_image, username: 'asdf' }.to raise_error(Discourse::NotLoggedIn)
-    end
-
-    context 'while logged in' do
-
-      let!(:user) { log_in }
-
-      let(:logo) { file_from_fixtures("logo.png") }
-
-      let(:user_image) do
-        ActionDispatch::Http::UploadedFile.new({ filename: 'logo.png', tempfile: logo })
-      end
-
-      it 'raises an error without a image_type param' do
-        expect { xhr :put, :upload_user_image, username: user.username }.to raise_error(ActionController::ParameterMissing)
-      end
-
-      describe "with uploaded file" do
-
-        it 'raises an error when you don\'t have permission to upload an user image' do
-          Guardian.any_instance.expects(:can_edit?).with(user).returns(false)
-          xhr :post, :upload_user_image, username: user.username, image_type: "avatar"
-          expect(response).to be_forbidden
-        end
-
-        it 'rejects large images' do
-          SiteSetting.stubs(:max_image_size_kb).returns(1)
-          xhr :post, :upload_user_image, username: user.username, file: user_image, image_type: "avatar"
-          expect(response.status).to eq 422
-        end
-
-        it 'rejects unauthorized images' do
-          SiteSetting.stubs(:authorized_extensions).returns(".txt")
-          xhr :post, :upload_user_image, username: user.username, file: user_image, image_type: "avatar"
-          expect(response.status).to eq 422
-        end
-
-        it 'is successful for avatars' do
-          upload = Fabricate(:upload)
-          Upload.expects(:create_for).returns(upload)
-          # enqueues the user_image generator job
-          xhr :post, :upload_user_image, username: user.username, file: user_image, image_type: "avatar"
-          # returns the url, width and height of the uploaded image
-          json = JSON.parse(response.body)
-          expect(json['url']).to eq("/uploads/default/1/1234567890123456.png")
-          expect(json['width']).to eq(100)
-          expect(json['height']).to eq(200)
-          expect(json['upload_id']).to eq(upload.id)
-        end
-
-        it 'is successful for profile backgrounds' do
-          upload = Fabricate(:upload)
-          Upload.expects(:create_for).returns(upload)
-          xhr :post, :upload_user_image, username: user.username, file: user_image, image_type: "profile_background"
-          user.reload
-
-          expect(user.user_profile.profile_background).to eq("/uploads/default/1/1234567890123456.png")
-
-          # returns the url, width and height of the uploaded image
-          json = JSON.parse(response.body)
-          expect(json['url']).to eq("/uploads/default/1/1234567890123456.png")
-          expect(json['width']).to eq(100)
-          expect(json['height']).to eq(200)
-        end
-
-        it 'is successful for card backgrounds' do
-          upload = Fabricate(:upload)
-          Upload.expects(:create_for).returns(upload)
-          xhr :post, :upload_user_image, username: user.username, file: user_image, image_type: "card_background"
-          user.reload
-
-          expect(user.user_profile.card_background).to eq("/uploads/default/1/1234567890123456.png")
-
-          # returns the url, width and height of the uploaded image
-          json = JSON.parse(response.body)
-          expect(json['url']).to eq("/uploads/default/1/1234567890123456.png")
-          expect(json['width']).to eq(100)
-          expect(json['height']).to eq(200)
-        end
-
-      end
-
-      describe "with url" do
-        let(:user_image_url) { "http://cdn.discourse.org/assets/logo.png" }
-
-        before { UsersController.any_instance.stubs(:is_api?).returns(true) }
-
-        describe "correct urls" do
-
-          before { FileHelper.stubs(:download).returns(logo) }
-
-          it 'rejects large images' do
-            SiteSetting.stubs(:max_image_size_kb).returns(1)
-            xhr :post, :upload_user_image, username: user.username, file: user_image_url, image_type: "profile_background"
-            expect(response.status).to eq 422
-          end
-
-          it 'rejects unauthorized images' do
-            SiteSetting.stubs(:authorized_extensions).returns(".txt")
-            xhr :post, :upload_user_image, username: user.username, file: user_image_url, image_type: "profile_background"
-            expect(response.status).to eq 422
-          end
-
-          it 'is successful for avatars' do
-            upload = Fabricate(:upload)
-            Upload.expects(:create_for).returns(upload)
-            # enqueues the user_image generator job
-            xhr :post, :upload_user_image, username: user.username, file: user_image_url, image_type: "avatar"
-            json = JSON.parse(response.body)
-            expect(json['url']).to eq("/uploads/default/1/1234567890123456.png")
-            expect(json['width']).to eq(100)
-            expect(json['height']).to eq(200)
-            expect(json['upload_id']).to eq(upload.id)
-          end
-
-          it 'is successful for profile backgrounds' do
-            upload = Fabricate(:upload)
-            Upload.expects(:create_for).returns(upload)
-            xhr :post, :upload_user_image, username: user.username, file: user_image_url, image_type: "profile_background"
-            user.reload
-            expect(user.user_profile.profile_background).to eq("/uploads/default/1/1234567890123456.png")
-
-            # returns the url, width and height of the uploaded image
-            json = JSON.parse(response.body)
-            expect(json['url']).to eq("/uploads/default/1/1234567890123456.png")
-            expect(json['width']).to eq(100)
-            expect(json['height']).to eq(200)
-          end
-
-          it 'is successful for card backgrounds' do
-            upload = Fabricate(:upload)
-            Upload.expects(:create_for).returns(upload)
-            xhr :post, :upload_user_image, username: user.username, file: user_image_url, image_type: "card_background"
-            user.reload
-            expect(user.user_profile.card_background).to eq("/uploads/default/1/1234567890123456.png")
-
-            # returns the url, width and height of the uploaded image
-            json = JSON.parse(response.body)
-            expect(json['url']).to eq("/uploads/default/1/1234567890123456.png")
-            expect(json['width']).to eq(100)
-            expect(json['height']).to eq(200)
-          end
-        end
-
-        it "should handle malformed urls" do
-          xhr :post, :upload_user_image, username: user.username, file: "foobar", image_type: "profile_background"
-          expect(response.status).to eq 422
-        end
-
-      end
-
-    end
-
-  end
-
   describe '.pick_avatar' do
 
     it 'raises an error when not logged in' do
-      expect { xhr :put, :pick_avatar, username: 'asdf', avatar_id: 1}.to raise_error(Discourse::NotLoggedIn)
+      expect {
+        xhr :put, :pick_avatar, username: 'asdf', avatar_id: 1, type: "custom"
+      }.to raise_error(Discourse::NotLoggedIn)
     end
 
     context 'while logged in' do
 
       let!(:user) { log_in }
+      let(:upload) { Fabricate(:upload) }
 
-      it 'raises an error when you don\'t have permission to toggle the avatar' do
+      it "raises an error when you don't have permission to toggle the avatar" do
         another_user = Fabricate(:user)
-        xhr :put, :pick_avatar, username: another_user.username, upload_id: 1
+        xhr :put, :pick_avatar, username: another_user.username, upload_id: upload.id, type: "custom"
         expect(response).to be_forbidden
       end
 
-      it 'it successful' do
-        xhr :put, :pick_avatar, username: user.username, upload_id: 111
-        expect(user.reload.uploaded_avatar_id).to eq(111)
-        expect(response).to be_success
-
+      it 'can successfully pick the system avatar' do
         xhr :put, :pick_avatar, username: user.username
-        expect(user.reload.uploaded_avatar_id).to eq(nil)
         expect(response).to be_success
+        expect(user.reload.uploaded_avatar_id).to eq(nil)
       end
 
-      it 'returns success' do
-        xhr :put, :pick_avatar, username: user.username, upload_id: 111
-        expect(user.reload.uploaded_avatar_id).to eq(111)
+      it 'can successfully pick a gravatar' do
+        xhr :put, :pick_avatar, username: user.username, upload_id: upload.id, type: "gravatar"
         expect(response).to be_success
-        json = ::JSON.parse(response.body)
-        expect(json['success']).to eq("OK")
+        expect(user.reload.uploaded_avatar_id).to eq(upload.id)
+        expect(user.user_avatar.reload.gravatar_upload_id).to eq(upload.id)
       end
+
+      it 'can successfully pick a custom avatar' do
+        xhr :put, :pick_avatar, username: user.username, upload_id: upload.id, type: "custom"
+        expect(response).to be_success
+        expect(user.reload.uploaded_avatar_id).to eq(upload.id)
+        expect(user.user_avatar.reload.custom_upload_id).to eq(upload.id)
+      end
+
     end
 
   end
@@ -1511,20 +1353,20 @@ describe UsersController do
 
       it 'raises an error when you don\'t have permission to clear the profile background' do
         Guardian.any_instance.expects(:can_edit?).with(user).returns(false)
-        xhr :delete, :destroy_user_image, username: user.username, image_type: 'profile_background'
+        xhr :delete, :destroy_user_image, username: user.username, type: 'profile_background'
         expect(response).to be_forbidden
       end
 
-      it "requires the `image_type` param" do
+      it "requires the `type` param" do
         expect { xhr :delete, :destroy_user_image, username: user.username }.to raise_error(ActionController::ParameterMissing)
       end
 
-      it "only allows certain `image_types`" do
-        expect { xhr :delete, :destroy_user_image, username: user.username, image_type: 'wat' }.to raise_error(Discourse::InvalidParameters)
+      it "only allows certain `types`" do
+        expect { xhr :delete, :destroy_user_image, username: user.username, type: 'wat' }.to raise_error(Discourse::InvalidParameters)
       end
 
       it 'can clear the profile background' do
-        xhr :delete, :destroy_user_image, image_type: 'profile_background', username: user.username
+        xhr :delete, :destroy_user_image, type: 'profile_background', username: user.username
         expect(user.reload.user_profile.profile_background).to eq("")
         expect(response).to be_success
       end

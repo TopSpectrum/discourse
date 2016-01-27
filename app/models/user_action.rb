@@ -79,12 +79,21 @@ SQL
   def self.private_messages_stats(user_id, guardian)
     return unless guardian.can_see_private_messages?(user_id)
     # list the stats for: all/mine/unread (topic-based)
-    private_messages = Topic.where("topics.id IN (SELECT topic_id FROM topic_allowed_users WHERE user_id = #{user_id})")
-                            .joins("LEFT OUTER JOIN topic_users AS tu ON (topics.id = tu.topic_id AND tu.user_id = #{user_id})")
-                            .private_messages
-    all = private_messages.count
-    mine = private_messages.where(user_id: user_id).count
-    unread = private_messages.where("tu.last_read_post_number IS NULL OR tu.last_read_post_number < topics.highest_post_number").count
+
+    sql = <<SQL
+    SELECT COUNT(*) "all",
+      SUM(CASE WHEN t.user_id = :user_id THEN 1 ELSE 0 END) mine,
+      SUM(CASE WHEN tu.last_read_post_number IS NULL OR tu.last_read_post_number < t.highest_post_number THEN 1 ELSE 0 END) unread
+    FROM topics t
+    LEFT JOIN topic_users tu ON t.id = tu.topic_id AND tu.user_id = :user_id
+    WHERE t.deleted_at IS NULL AND
+          t.id IN (SELECT topic_id FROM topic_allowed_users WHERE user_id = :user_id) AND
+          t.archetype = 'private_message'
+
+SQL
+
+    all,mine,unread = exec_sql(sql, user_id: user_id).values[0].map(&:to_i)
+
     { all: all, mine: mine, unread: unread }
   end
 
@@ -142,6 +151,7 @@ SQL
       SELECT
         a.id,
         t.title, a.action_type, a.created_at, t.id topic_id,
+        t.closed AS topic_closed, t.archived AS topic_archived,
         a.user_id AS target_user_id, au.name AS target_name, au.username AS target_username,
         coalesce(p.post_number, 1) post_number, p.id as post_id,
         p.reply_to_post_number,
@@ -153,6 +163,7 @@ SQL
         CASE WHEN coalesce(p.deleted_at, p2.deleted_at, t.deleted_at) IS NULL THEN false ELSE true END deleted,
         p.hidden,
         p.post_type,
+        p.action_code,
         p.edit_reason,
         t.category_id
       FROM user_actions as a
@@ -224,7 +235,7 @@ SQL
         end
 
         if action.user
-          DiscourseBus.publish("/users/#{action.user.username.downcase}", action.id, user_ids: [user_id], group_ids: group_ids)
+          MessageBus.publish("/users/#{action.user.username.downcase}", action.id, user_ids: [user_id], group_ids: group_ids)
         end
 
         action
@@ -240,7 +251,7 @@ SQL
     require_parameters(hash, :action_type, :user_id, :acting_user_id, :target_topic_id, :target_post_id)
     if action = UserAction.find_by(hash.except(:created_at))
       action.destroy
-      DiscourseBus.publish("/user/#{hash[:user_id]}", {user_action_id: action.id, remove: true})
+      MessageBus.publish("/user/#{hash[:user_id]}", {user_action_id: action.id, remove: true})
     end
 
     update_like_count(hash[:user_id], hash[:action_type], -1)
@@ -294,7 +305,6 @@ SQL
   end
 
   def self.apply_common_filters(builder,user_id,guardian,ignore_private_messages=false)
-
     # We never return deleted topics in activity
     builder.where("t.deleted_at is null")
 
@@ -306,6 +316,9 @@ SQL
       current_user_id = guardian.user.id if guardian.user
       builder.where("NOT COALESCE(p.hidden, false) OR p.user_id = :current_user_id", current_user_id: current_user_id )
     end
+
+    visible_post_types = Topic.visible_post_types(guardian.user)
+    builder.where("COALESCE(p.post_type, p2.post_type) IN (:visible_post_types)", visible_post_types: visible_post_types)
 
     unless (guardian.user && guardian.user.id == user_id) || guardian.is_staff?
       builder.where("a.action_type not in (#{BOOKMARK})")
@@ -352,10 +365,13 @@ end
 #  acting_user_id  :integer
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
+#  queued_post_id  :integer
 #
 # Indexes
 #
 #  idx_unique_rows                                (action_type,user_id,target_topic_id,target_post_id,acting_user_id) UNIQUE
+#  idx_user_actions_speed_up_user_all             (user_id,created_at,action_type)
 #  index_user_actions_on_acting_user_id           (acting_user_id)
+#  index_user_actions_on_target_post_id           (target_post_id)
 #  index_user_actions_on_user_id_and_action_type  (user_id,action_type)
 #

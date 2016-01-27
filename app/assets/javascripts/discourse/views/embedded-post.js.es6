@@ -1,13 +1,17 @@
+import ScreenTrack from 'discourse/lib/screen-track';
+
 export default Discourse.GroupedView.extend({
-  templateName: 'embedded_post',
+  templateName: 'embedded-post',
   classNames: ['reply'],
+  attributeBindings: ['data-post-id'],
+  'data-post-id': Em.computed.alias('content.id'),
 
   _startTracking: function() {
-    var post = this.get('content');
-    Discourse.ScreenTrack.current().track(this.get('elementId'), post.get('post_number'));
+    const post = this.get('content');
+    ScreenTrack.current().track(this.get('elementId'), post.get('post_number'));
   }.on('didInsertElement'),
 
   _stopTracking: function() {
-    Discourse.ScreenTrack.current().stopTracking(this.get('elementId'));
+    ScreenTrack.current().stopTracking(this.get('elementId'));
   }.on('willDestroyElement')
 });

@@ -303,13 +303,16 @@ This is a link http://example.com"
       let(:upload_sha) { '04df605be528d03876685c52166d4b063aabb78a' }
 
       it "creates a post with an attachment" do
+        Upload.stubs(:fix_image_orientation)
+        ImageOptim.any_instance.stubs(:optimize_image!)
+
         start_count = topic.posts.count
-        Upload.find_by(sha1: upload_sha).try :destroy
+        Upload.find_by(sha1: upload_sha).try(:destroy)
 
         receiver.process
 
         expect(topic.posts.count).to eq(start_count + 1)
-        expect(topic.posts.last.cooked).to match /<img src=['"](\/uploads\/default\/\d+\/\w{16}\.png)['"] width=['"]289['"] height=['"]126['"]>/
+        expect(topic.posts.last.cooked).to match /<img src=['"](\/uploads\/default\/original\/.+\.png)['"] width=['"]289['"] height=['"]126['"]>/
         expect(Upload.find_by(sha1: upload_sha)).not_to eq(nil)
       end
 

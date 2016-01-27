@@ -2,6 +2,36 @@ require 'spec_helper'
 
 describe AdminDashboardData do
 
+  describe "adding new checks" do
+    after do
+      AdminDashboardData.reset_problem_checks
+    end
+
+    it 'calls the passed block' do
+      called = false
+      AdminDashboardData.add_problem_check do
+        called = true
+      end
+
+      AdminDashboardData.fetch_problems
+      expect(called).to eq(true)
+    end
+
+    it 'calls the passed method' do
+      $test_AdminDashboardData_global = false
+      class AdminDashboardData
+        def my_test_method
+          $test_AdminDashboardData_global = true
+        end
+      end
+      AdminDashboardData.add_problem_check :my_test_method
+
+      AdminDashboardData.fetch_problems
+      expect($test_AdminDashboardData_global).to eq(true)
+      $test_AdminDashboardData_global = nil
+    end
+  end
+
   describe "rails_env_check" do
     subject { described_class.new.rails_env_check }
 
@@ -135,8 +165,8 @@ describe AdminDashboardData do
 
     describe 'favicon_url check' do
       before do
-        SiteSetting.stubs(:logo_url).returns('/assets/my-logo.jpg')
-        SiteSetting.stubs(:logo_small_url).returns('/assets/my-small-logo.jpg')
+        SiteSetting.logo_url = '/assets/my-logo.jpg'
+        SiteSetting.logo_small_url = '/assets/my-small-logo.jpg'
       end
 
       it 'returns a string when favicon_url is default' do
@@ -144,20 +174,20 @@ describe AdminDashboardData do
       end
 
       it 'returns a string when favicon_url contains default filename' do
-        SiteSetting.stubs(:favicon_url).returns("/prefix#{SiteSetting.defaults[:favicon_url]}")
+        SiteSetting.favicon_url = "/prefix#{SiteSetting.defaults[:favicon_url]}"
         expect(subject).not_to be_nil
       end
 
       it 'returns nil when favicon_url does not match default-favicon.png' do
-        SiteSetting.stubs(:favicon_url).returns('/assets/my-favicon.png')
+        SiteSetting.favicon_url = '/assets/my-favicon.png'
         expect(subject).to be_nil
       end
     end
 
     describe 'logo_url check' do
       before do
-        SiteSetting.stubs(:favicon_url).returns('/assets/my-favicon.png')
-        SiteSetting.stubs(:logo_small_url).returns('/assets/my-small-logo.jpg')
+        SiteSetting.favicon_url = '/assets/my-favicon.png'
+        SiteSetting.logo_small_url = '/assets/my-small-logo.jpg'
       end
 
       it 'returns a string when logo_url is default' do
@@ -165,12 +195,12 @@ describe AdminDashboardData do
       end
 
       it 'returns a string when logo_url contains default filename' do
-        SiteSetting.stubs(:logo_url).returns("/prefix#{SiteSetting.defaults[:logo_url]}")
+        SiteSetting.logo_url = "/prefix#{SiteSetting.defaults[:logo_url]}"
         expect(subject).not_to be_nil
       end
 
       it 'returns nil when logo_url does not match d-logo-sketch.png' do
-        SiteSetting.stubs(:logo_url).returns('/assets/my-logo.png')
+        SiteSetting.logo_url = '/assets/my-logo.png'
         expect(subject).to be_nil
       end
     end
@@ -244,20 +274,8 @@ describe AdminDashboardData do
     end
   end
 
-  describe 's3_deprecation_warning' do
-    subject { described_class.new.s3_deprecation_warning }
-
-    it 'returns nil when using local storage' do
-      SiteSetting.stubs(:enable_s3_uploads).returns(false)
-      ENV.stubs(:[]).with('RUBY_GC_MALLOC_LIMIT').returns(90000000)
-      expect(subject).to be_nil
-    end
-
-    it 'returns a string when s3 storage' do
-      SiteSetting.stubs(:enable_s3_uploads).returns(true)
-      expect(subject).to_not be_nil
-    end
-
+  describe 'stats cache' do
+    include_examples 'stats cachable'
   end
 
 end

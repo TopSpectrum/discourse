@@ -1,19 +1,19 @@
-export default Ember.ObjectController.extend({
+export default Ember.Controller.extend({
   loading: false,
+  limit: null,
+  offset: null,
 
   actions: {
     loadMore() {
       if (this.get("loading")) { return; }
       // we've reached the end
-      if (this.get("members.length") >= this.get("user_count")) { return; }
+      if (this.get("model.members.length") >= this.get("model.user_count")) { return; }
 
       this.set("loading", true);
 
-      const self = this;
-
-      Discourse.Group.loadMembers(this.get("name"), this.get("members.length"), this.get("limit")).then(function (result) {
-        self.get("members").addObjects(result.members.map(member => Discourse.User.create(member)));
-        self.setProperties({
+      Discourse.Group.loadMembers(this.get("name"), this.get("model.members.length"), this.get("limit")).then(result => {
+        this.get("model.members").addObjects(result.members.map(member => Discourse.User.create(member)));
+        this.setProperties({
           loading: false,
           user_count: result.meta.total,
           limit: result.meta.limit,
@@ -23,4 +23,3 @@ export default Ember.ObjectController.extend({
     }
   }
 });
-

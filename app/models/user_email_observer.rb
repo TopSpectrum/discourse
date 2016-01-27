@@ -39,8 +39,7 @@ class UserEmailObserver < ActiveRecord::Observer
     private
 
     def enqueue(type)
-      return unless notification.user.email_direct?
-
+      return unless (notification.user.email_direct? && notification.user.active?)
 
       Jobs.enqueue_in(delay,
                      :user_email,
@@ -50,7 +49,8 @@ class UserEmailObserver < ActiveRecord::Observer
     end
 
     def enqueue_private(type)
-      return unless (notification.user.email_direct? && notification.user.email_private_messages?)
+      return unless (notification.user.email_private_messages? && notification.user.active?)
+
       Jobs.enqueue_in(delay,
                       :user_email,
                       type: type,

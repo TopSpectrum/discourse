@@ -71,7 +71,7 @@ You may use this client to connect to the VM by using ```vagrant/vagrant``` as y
 PuTTYGen to import the insecure_private_key file](http://jason.sharonandjason.com/key_based_putty_logins_mini_how_to.htm)
 (mentioned above) into a PuTTY profile to quickly access your VM.
 
-### Keeping your VM up to date
+### Keeping your VM up to date (and first install)
 
 Now you're in a virtual machine is almost ready to start developing. It's a good idea to perform the following instructions
 *every time* you pull from master to ensure your environment is still up to date.
@@ -126,7 +126,7 @@ Mailcatcher is used to avoid the whole issue of actually sending emails: https:/
 Mailcatcher is already installed in the vm, and there's an alias to launch it:
 
 ```
-mc
+mailcatcher --http-ip=0.0.0.0
 ```
 
 Then in a browser, go to [http://localhost:4080](http://localhost:4080). Sent emails will be received by mailcatcher and shown in its web ui.

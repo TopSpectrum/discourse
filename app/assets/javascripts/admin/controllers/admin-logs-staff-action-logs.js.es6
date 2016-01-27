@@ -1,7 +1,7 @@
-import Presence from 'discourse/mixins/presence';
+import { exportEntity } from 'discourse/lib/export-csv';
 import { outputExportResult } from 'discourse/lib/export-result';
 
-export default Ember.ArrayController.extend(Presence, {
+export default Ember.ArrayController.extend({
   loading: false,
   filters: null,
 
@@ -93,7 +93,7 @@ export default Ember.ArrayController.extend(Presence, {
     },
 
     exportStaffActionLogs: function() {
-      Discourse.ExportCsv.exportStaffActionLogs().then(outputExportResult);
+      exportEntity('staff_action').then(outputExportResult);
     }
   }
 });

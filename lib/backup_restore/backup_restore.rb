@@ -13,8 +13,8 @@ module BackupRestore
     start! BackupRestore::Backuper.new(user_id, opts)
   end
 
-  def self.restore!(user_id, filename, publish_to_message_bus=false)
-    start! BackupRestore::Restorer.new(user_id, filename, publish_to_message_bus)
+  def self.restore!(user_id, opts={})
+    start! BackupRestore::Restorer.new(user_id, opts)
   end
 
   def self.rollback!
@@ -62,7 +62,7 @@ module BackupRestore
 
   def self.logs
     id = start_logs_message_id
-    DiscourseBus.backlog(LOGS_CHANNEL, id).map { |m| m.data }
+    MessageBus.backlog(LOGS_CHANNEL, id).map { |m| m.data }
   end
 
   def self.current_version
@@ -142,7 +142,7 @@ module BackupRestore
   end
 
   def self.save_start_logs_message_id
-    id = DiscourseBus.last_id(LOGS_CHANNEL)
+    id = MessageBus.last_id(LOGS_CHANNEL)
     $redis.set(start_logs_message_id_key, id)
   end
 

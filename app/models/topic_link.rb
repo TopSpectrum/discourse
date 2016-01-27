@@ -133,7 +133,7 @@ class TopicLink < ActiveRecord::Base
             topic_id = nil unless topic
 
             if topic.present?
-              url = "#{Discourse.base_url}#{topic.relative_url}"
+              url = "#{Discourse.base_url_no_prefix}#{topic.relative_url}"
               url << "/#{post_number}" if post_number.to_i > 1
             end
 
@@ -168,7 +168,7 @@ class TopicLink < ActiveRecord::Base
 
             if topic && post.topic && post.topic.archetype != 'private_message' && topic.archetype != 'private_message'
 
-              prefix = Discourse.base_url
+              prefix = Discourse.base_url_no_prefix
 
               reflected_url = "#{prefix}#{post.topic.relative_url(post.post_number)}"
 
@@ -231,7 +231,8 @@ end
 #
 # Indexes
 #
-#  index_topic_links_on_post_id   (post_id)
-#  index_topic_links_on_topic_id  (topic_id)
-#  unique_post_links              (topic_id,post_id,url) UNIQUE
+#  index_topic_links_on_link_post_id_and_reflection  (link_post_id,reflection)
+#  index_topic_links_on_post_id                      (post_id)
+#  index_topic_links_on_topic_id                     (topic_id)
+#  unique_post_links                                 (topic_id,post_id,url) UNIQUE
 #

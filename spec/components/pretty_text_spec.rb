@@ -9,10 +9,11 @@ describe PrettyText do
   describe "Cooking" do
 
     describe "with avatar" do
+      let(:default_avatar) { "//test.localhost/uploads/default/avatars/42d/57c/46ce7ee487/{size}.png" }
 
       before(:each) do
         eviltrout = User.new
-        eviltrout.stubs(:avatar_template).returns("//test.localhost/uploads/default/avatars/42d/57c/46ce7ee487/{size}.png")
+        User.stubs(:default_template).returns(default_avatar)
         User.expects(:find_by).with(username_lower: "eviltrout").returns(eviltrout)
       end
 
@@ -69,8 +70,16 @@ describe PrettyText do
       expect(PrettyText.cook("<a href='#{Discourse.base_url.sub('http://', 'http://bla.')}/test.html'>cnn</a>") !~ /nofollow/).to eq(true)
     end
 
+    it "should inject nofollow in all non subdomain links" do
+      expect(PrettyText.cook("<a href='#{Discourse.base_url.sub('http://', 'http://bla')}/test.html'>cnn</a>")).to match(/nofollow/)
+    end
+
     it "should not inject nofollow for foo.com" do
       expect(PrettyText.cook("<a href='http://foo.com/test.html'>cnn</a>") !~ /nofollow/).to eq(true)
+    end
+
+    it "should inject nofollow for afoo.com" do
+      expect(PrettyText.cook("<a href='http://afoo.com/test.html'>cnn</a>")).to match(/nofollow/)
     end
 
     it "should not inject nofollow for bar.foo.com" do
@@ -221,6 +230,11 @@ describe PrettyText do
       expect(PrettyText.excerpt("&#39;", 500, text_entities: true)).to eq("'")
     end
 
+    it "should have an option to preserve emojis" do
+      emoji_image = "<img src='/images/emoji/emoji_one/heart.png?v=0' title=':heart:' class='emoji' alt='heart'>"
+      expect(PrettyText.excerpt(emoji_image, 100, { keep_emojis: true })).to match_html(emoji_image)
+    end
+
   end
 
   describe "strip links" do
@@ -306,6 +320,52 @@ describe PrettyText do
 
   it 'can include code class correctly' do
     expect(PrettyText.cook("```cpp\ncpp\n```")).to match_html("<p></p><pre><code class='lang-cpp'>cpp</code></pre>")
+  end
+
+  it 'indents code correctly' do
+    code = "X\n```\n\n    #\n    x\n```"
+    cooked = PrettyText.cook(code)
+    expect(cooked).to match_html("<p>X<br></p>\n\n<p></p><pre><code class=\"lang-auto\">    #\n    x</code></pre>")
+  end
+
+  it 'can substitute s3 cdn correctly' do
+    SiteSetting.enable_s3_uploads = true
+    SiteSetting.s3_access_key_id = "XXX"
+    SiteSetting.s3_secret_access_key = "XXX"
+    SiteSetting.s3_upload_bucket = "test"
+    SiteSetting.s3_cdn_url = "https://awesome.cdn"
+
+    # add extra img tag to ensure it does not blow up
+    raw = "<img><img src='#{Discourse.store.absolute_base_url}/original/9/9/99c9384b8b6d87f8509f8395571bc7512ca3cad1.jpg'"
+    cooked = "<p><img><img src='https://awesome.cdn/original/9/9/99c9384b8b6d87f8509f8395571bc7512ca3cad1.jpg'></p>"
+
+    expect(PrettyText.cook(raw)).to match_html(cooked)
+  end
+
+  describe 'tables' do
+    before do
+      PrettyText.reset_context
+    end
+
+    after do
+      PrettyText.reset_context
+    end
+
+    it 'allows table html' do
+      SiteSetting.allow_html_tables = true
+      PrettyText.reset_context
+      table = "<table class='fa-spin'><thead><tr>\n<th class='fa-spin'>test</th></tr></thead><tbody><tr><td>a</td></tr></tbody></table>"
+      match = "<table class=\"md-table\"><thead><tr> <th>test</th> </tr></thead><tbody><tr><td>a</td></tr></tbody></table>"
+      expect(PrettyText.cook(table)).to match_html(match)
+
+    end
+
+    it 'allows no tables when not enabled' do
+      SiteSetting.allow_html_tables = false
+      table = "<table><thead><tr><th>test</th></tr></thead><tbody><tr><td>a</td></tr></tbody></table>"
+      expect(PrettyText.cook(table)).to match_html("")
+    end
+
   end
 
 end

@@ -89,7 +89,7 @@ describe Discourse do
 
     it "adds a key in redis and publish a message through the message bus" do
       $redis.expects(:set).with(Discourse.readonly_mode_key, 1)
-      DiscourseBus.expects(:publish).with(Discourse.readonly_channel, true)
+      MessageBus.expects(:publish).with(Discourse.readonly_channel, true)
       Discourse.enable_readonly_mode
     end
 
@@ -99,18 +99,13 @@ describe Discourse do
 
     it "removes a key from redis and publish a message through the message bus" do
       $redis.expects(:del).with(Discourse.readonly_mode_key)
-      DiscourseBus.expects(:publish).with(Discourse.readonly_channel, false)
+      MessageBus.expects(:publish).with(Discourse.readonly_channel, false)
       Discourse.disable_readonly_mode
     end
 
   end
 
   context "#readonly_mode?" do
-
-    after do
-      DiscourseRedis.clear_readonly!
-    end
-
     it "is false by default" do
       expect(Discourse.readonly_mode?).to eq(false)
     end
@@ -120,8 +115,8 @@ describe Discourse do
       expect(Discourse.readonly_mode?).to eq(true)
     end
 
-    it "returns true when DiscourseRedis is recently read only" do
-      DiscourseRedis.received_readonly!
+    it "returns true when Discourse is recently read only" do
+      Discourse.received_readonly!
       expect(Discourse.readonly_mode?).to eq(true)
     end
   end

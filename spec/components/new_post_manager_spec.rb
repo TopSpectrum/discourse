@@ -17,6 +17,42 @@ describe NewPostManager do
     end
   end
 
+  context "default action" do
+    let(:other_user) { Fabricate(:user) }
+
+    it "doesn't enqueue private messages" do
+      SiteSetting.approve_unless_trust_level = 4
+
+      manager = NewPostManager.new(topic.user,
+                                   raw: 'this is a new post',
+                                   title: 'this is a new title',
+                                   archetype: Archetype.private_message,
+                                   target_usernames: other_user.username)
+
+      result = manager.perform
+
+      expect(result.action).to eq(:create_post)
+      expect(result).to be_success
+      expect(result.post).to be_present
+      expect(result.post.topic.private_message?).to eq(true)
+      expect(result.post).to be_a(Post)
+
+      # It doesn't enqueue replies to the private message either
+      manager = NewPostManager.new(topic.user,
+                                   raw: 'this is a new reply',
+                                   topic_id: result.post.topic_id)
+
+      result = manager.perform
+
+      expect(result.action).to eq(:create_post)
+      expect(result).to be_success
+      expect(result.post).to be_present
+      expect(result.post.topic.private_message?).to eq(true)
+      expect(result.post).to be_a(Post)
+    end
+
+  end
+
   context "default handler" do
     let(:manager) { NewPostManager.new(topic.user, raw: 'this is new post content', topic_id: topic.id) }
 
@@ -54,6 +90,7 @@ describe NewPostManager do
         expect(result.action).to eq(:enqueued)
       end
     end
+
   end
 
   context "extensibility priority" do
@@ -153,6 +190,37 @@ describe NewPostManager do
       expect(@counter).to be(0)
     end
 
+  end
+
+
+  context "user needs approval?" do
+
+    let :user do
+      user = Fabricate.build(:user, trust_level: 0)
+      user_stat = UserStat.new(post_count: 0)
+      user.user_stat = user_stat
+      user
+    end
+
+
+
+    it "handles user_needs_approval? correctly" do
+      u = user
+      default = NewPostManager.new(u,{})
+      expect(NewPostManager.user_needs_approval?(default)).to eq(false)
+
+      with_check = NewPostManager.new(u,{first_post_checks: true})
+      expect(NewPostManager.user_needs_approval?(with_check)).to eq(true)
+
+      u.user_stat.post_count = 1
+      with_check_and_post = NewPostManager.new(u,{first_post_checks: true})
+      expect(NewPostManager.user_needs_approval?(with_check_and_post)).to eq(false)
+
+      u.user_stat.post_count = 0
+      u.trust_level = 1
+      with_check_tl1 = NewPostManager.new(u,{first_post_checks: true})
+      expect(NewPostManager.user_needs_approval?(with_check_tl1)).to eq(false)
+    end
   end
 
 end

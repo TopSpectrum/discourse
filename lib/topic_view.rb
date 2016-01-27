@@ -38,7 +38,9 @@ class TopicView
       self.instance_variable_set("@#{key}".to_sym, value)
     end
 
-    @page = @page.to_i
+    # work around people somehow sending in arrays,
+    # arrays are not supported
+    @page = @page.to_i rescue 1
     @page = 1 if @page.zero?
     @chunk_size = options[:slow_platform] ? TopicView.slow_chunk_size : TopicView.chunk_size
     @limit ||= @chunk_size
@@ -129,6 +131,14 @@ class TopicView
     @topic.relative_url
   end
 
+  def page_title
+    title = @topic.title
+    if @topic.category_id != SiteSetting.uncategorized_category_id && @topic.category_id && @topic.category
+      title += " - #{topic.category.name}"
+    end
+    title
+  end
+
   def title
     @topic.title
   end
@@ -181,11 +191,9 @@ class TopicView
 
   # Find the sort order for a post in the topic
   def sort_order_for_post_number(post_number)
-    Post.where(topic_id: @topic.id, post_number: post_number)
-        .with_deleted
-        .select(:sort_order)
-        .first
-        .try(:sort_order)
+    posts = Post.where(topic_id: @topic.id, post_number: post_number).with_deleted
+    posts = filter_post_types(posts)
+    posts.select(:sort_order).first.try(:sort_order)
   end
 
   # Filter to all posts near a particular post number
@@ -322,11 +330,22 @@ class TopicView
 
   private
 
+  def filter_post_types(posts)
+    visible_types = Topic.visible_post_types(@user)
+
+    if @user.present?
+      posts.where("user_id = ? OR post_type IN (?)", @user.id, visible_types)
+    else
+      posts.where(post_type: visible_types)
+    end
+  end
+
   def filter_posts_by_ids(post_ids)
     # TODO: Sort might be off
     @posts = Post.where(id: post_ids, topic_id: @topic.id)
                  .includes(:user, :reply_to_user)
                  .order('sort_order')
+    @posts = filter_post_types(@posts)
     @posts = @posts.with_deleted if @guardian.can_see_deleted_posts?
     @posts
   end
@@ -345,13 +364,13 @@ class TopicView
   end
 
   def find_topic(topic_id)
-    finder = Topic.where(id: topic_id).includes(:category)
-    finder = finder.with_deleted if @guardian.can_see_deleted_topics?
+    # with_deleted covered in #check_and_raise_exceptions
+    finder = Topic.with_deleted.where(id: topic_id).includes(:category)
     finder.first
   end
 
   def unfiltered_posts
-    result = @topic.posts
+    result = filter_post_types(@topic.posts)
     result = result.with_deleted if @guardian.can_see_deleted_posts?
     result = @topic.posts.where("user_id IS NOT NULL") if @exclude_deleted_users
     result
@@ -369,7 +388,7 @@ class TopicView
     end
 
     if @best.present?
-      @filtered_posts = @filtered_posts.where('posts.post_type <> ?', Post.types[:moderator_action])
+      @filtered_posts = @filtered_posts.where('posts.post_type = ?', Post.types[:regular])
       @contains_gaps = true
     end
 
@@ -398,7 +417,7 @@ class TopicView
     if @topic.present? && @topic.private_message? && @user.blank?
       raise Discourse::NotLoggedIn.new
     end
-    guardian.ensure_can_see!(@topic)
+    raise Discourse::InvalidAccess.new("can't see #{@topic}", @topic) unless guardian.can_see?(@topic)
   end
 
 
@@ -433,7 +452,14 @@ class TopicView
   end
 
   def closest_post_to(post_number)
-    closest_post = @filtered_posts.order("@(post_number - #{post_number})").limit(1).pluck(:id)
+    # happy path
+    closest_post = @filtered_posts.where("post_number = ?", post_number).limit(1).pluck(:id)
+
+    if closest_post.empty?
+      # less happy path, missing post
+      closest_post = @filtered_posts.order("@(post_number - #{post_number})").limit(1).pluck(:id)
+    end
+
     return nil if closest_post.empty?
 
     filtered_post_ids.index(closest_post.first) || filtered_post_ids[0]

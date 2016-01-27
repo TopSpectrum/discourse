@@ -45,6 +45,11 @@ module Discourse
       end
     end
 
+    # Disable so this is only run manually
+    # we may want to change this later on
+    # issue is image_optim crashes on missing dependencies
+    config.assets.image_optim = false
+
     # Custom directories with classes and modules you want to be autoloadable.
     config.autoload_paths += Dir["#{config.root}/app/serializers"]
     config.autoload_paths += Dir["#{config.root}/lib/validators/"]
@@ -117,9 +122,9 @@ module Discourse
     # see: http://stackoverflow.com/questions/11894180/how-does-one-correctly-add-custom-sql-dml-in-migrations/11894420#11894420
     config.active_record.schema_format = :sql
 
-    if rails_master?
+    if Rails.version >= "4.2.0" && Rails.version < "5.0.0"
       # Opt-into the default behavior in Rails 5
-      # config.active_record.raise_in_transactional_callbacks = true
+      config.active_record.raise_in_transactional_callbacks = false
     end
 
     # per https://www.owasp.org/index.php/Password_Storage_Cheat_Sheet

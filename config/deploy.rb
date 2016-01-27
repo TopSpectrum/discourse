@@ -1,4 +1,5 @@
-puts "Vlad loading..."
+
+=begin
 set :application, "dotforum"
 
 key_location = ENV["EC2_KEY"]
@@ -8,11 +9,12 @@ unless key_location
 end
 set :ssh_flags, [ "-i", "#{key_location}"]
 
-set :domain, "ubuntu@ec2-54-218-52-233.us-west-2.compute.amazonaws.com"
+set :domain, "ubuntu@dotforum"
 set :deploy_to, "/srv/topspectrum/dotforum"
 
 set :repository, 'https://github.com/TopSpectrum/discourse.git'
 set :revision, "origin/master"
+
 #task :staging do
 #end
 
@@ -22,3 +24,4 @@ set :revision, "origin/master"
 #end
 
 #/Users/jason/workspace/topspectrum/keys/default.pem
+=end

@@ -10,9 +10,10 @@ class QueuedPostSerializer < ApplicationSerializer
              :raw,
              :post_options,
              :created_at,
-             :category_id
+             :category_id,
+             :can_delete_user
 
-  has_one :user, serializer: BasicUserSerializer
+  has_one :user, serializer: AdminUserListSerializer
   has_one :topic, serializer: BasicTopicSerializer
 
   def category_id
@@ -22,6 +23,14 @@ class QueuedPostSerializer < ApplicationSerializer
 
   def include_category_id?
     category_id.present?
+  end
+
+  def can_delete_user
+    true
+  end
+
+  def include_can_delete_user?
+    user.trust_level == TrustLevel[0]
   end
 
 end

@@ -4,15 +4,23 @@ require_dependency 'single_sign_on'
 class SessionController < ApplicationController
 
   skip_before_filter :redirect_to_login_if_required
-  skip_before_filter :check_xhr, only: ['sso', 'sso_login', 'become', 'sso_provider']
+  skip_before_filter :preload_json, :check_xhr, only: ['sso', 'sso_login', 'become', 'sso_provider']
 
   def csrf
     render json: {csrf: form_authenticity_token }
   end
 
   def sso
-    if SiteSetting.enable_sso
-      redirect_to DiscourseSingleSignOn.generate_url(params[:return_path] || path('/'))
+    return_path = if params[:return_path]
+      params[:return_path]
+    elsif session[:destination_url]
+      URI::parse(session[:destination_url]).path
+    else
+      path('/')
+    end
+
+    if SiteSetting.enable_sso?
+      redirect_to DiscourseSingleSignOn.generate_url(return_path)
     else
       render nothing: true, status: 404
     end
@@ -57,7 +65,7 @@ class SessionController < ApplicationController
 
     sso = DiscourseSingleSignOn.parse(request.query_string)
     if !sso.nonce_valid?
-      return render(text: I18n.t("sso.timeout_expired"), status: 500)
+      return render(text: I18n.t("sso.timeout_expired"), status: 419)
     end
 
     if ScreenedIpAddress.should_block?(request.remote_ip)
@@ -71,7 +79,17 @@ class SessionController < ApplicationController
       if user = sso.lookup_or_create_user(request.remote_ip)
 
         if SiteSetting.must_approve_users? && !user.approved?
-          render text: I18n.t("sso.account_not_approved"), status: 403
+          if SiteSetting.sso_not_approved_url.present?
+            redirect_to SiteSetting.sso_not_approved_url
+          else
+            render text: I18n.t("sso.account_not_approved"), status: 403
+          end
+          return
+        elsif !user.active?
+          activation = UserActivator.new(user, request, session, cookies)
+          activation.finish
+          session["user_created_message"] = activation.message
+          redirect_to users_account_created_path and return
         else
           log_on_user user
         end
@@ -90,12 +108,13 @@ class SessionController < ApplicationController
       else
         render text: I18n.t("sso.not_found"), status: 500
       end
+
     rescue => e
       details = {}
       SingleSignOn::ACCESSORS.each do |a|
         details[a] = sso.send(a)
       end
-      Discourse.handle_job_exception(e, details)
+      Rails.logger.error "Failed to create or lookup user: #{e}\n\n#{details.map{|k,v| "#{k}: #{v}"}.join("\n")}"
 
       render text: I18n.t("sso.unknown_error"), status: 500
     end

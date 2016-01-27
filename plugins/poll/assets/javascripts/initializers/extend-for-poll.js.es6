@@ -1,16 +1,12 @@
 import PostView from "discourse/views/post";
+import { on } from "ember-addons/ember-computed-decorators";
 
 function createPollView(container, post, poll, vote) {
   const controller = container.lookup("controller:poll", { singleton: false }),
         view = container.lookup("view:poll");
 
   controller.set("vote", vote);
-
-  controller.setProperties({
-    model: Em.Object.create(poll),
-    post: post,
-  });
-
+  controller.setProperties({ model: Em.Object.create(poll), post });
   view.set("controller", controller);
 
   return view;
@@ -25,16 +21,17 @@ export default {
 
     // listen for back-end to tell us when a post has a poll
     messageBus.subscribe("/polls", data => {
-      const post = container.lookup("controller:topic").get("postStream").findLoadedPost(data.post_id);
+      const post = container.lookup("controller:topic").get('model.postStream').findLoadedPost(data.post_id);
       // HACK to trigger the "postViewUpdated" event
-      post.set("cooked", post.get("cooked") + " ");
+      Em.run.next(() => post.set("cooked", post.get("cooked") + " "));
     });
 
     // overwrite polls
     PostView.reopen({
-      _createPollViews: function($post) {
-        const self = this,
-              post = this.get("post"),
+
+      @on("postViewInserted", "postViewUpdated")
+      _createPollViews($post) {
+        const post = this.get("post"),
               polls = post.get("polls"),
               votes = post.get("polls_votes") || {};
 
@@ -54,11 +51,11 @@ export default {
                 pollView = createPollView(container, post, polls[pollName], votes[pollName]);
 
           $poll.replaceWith($div);
-          pollView.constructor.renderer.replaceIn(pollView, $div[0]);
+          Em.run.next(() => pollView.renderer.replaceIn(pollView, $div[0]));
           pollViews[pollName] = pollView;
         });
 
-        this.messageBus.subscribe("/polls/" + this.get("post.id"), results => {
+        messageBus.subscribe(`/polls/${this.get("post.id")}`, results => {
           if (results && results.polls) {
             _.forEach(results.polls, poll => {
               if (pollViews[poll.name]) {
@@ -69,15 +66,16 @@ export default {
         });
 
         this.set("pollViews", pollViews);
-      }.on("postViewInserted", "postViewUpdated"),
+      },
 
-      _cleanUpPollViews: function() {
-        this.messageBus.unsubscribe("/polls/" + this.get("post.id"));
+      @on("willClearRender")
+      _cleanUpPollViews() {
+        messageBus.unsubscribe(`/polls/${this.get("post.id")}`);
 
         if (this.get("pollViews")) {
           _.forEach(this.get("pollViews"), v => v.destroy());
         }
-      }.on("willClearRender")
+      }
     });
   }
-}
+};

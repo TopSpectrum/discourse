@@ -1,10 +1,13 @@
-export default Em.ObjectController.extend({
-  showLoginButton: Em.computed.equal('path', 'login'),
+export default Ember.Controller.extend({
+  showLoginButton: Em.computed.equal("model.path", "login"),
 
   actions: {
-    markFaqRead: function() {
-      if (Discourse.User.current()) {
-        Discourse.ajax("/users/read-faq", { method: "POST" });
+    markFaqRead() {
+      const currentUser = this.currentUser;
+      if (currentUser) {
+        Discourse.ajax("/users/read-faq", { method: "POST" }).then(() => {
+          currentUser.set('read_faq', true);
+        });
       }
     }
   }

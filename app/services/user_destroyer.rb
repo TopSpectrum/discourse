@@ -20,6 +20,7 @@ class UserDestroyer
 
     User.transaction do
 
+      Draft.where(user_id: user.id).delete_all
       QueuedPost.where(user_id: user.id).delete_all
 
       if opts[:delete_posts]
@@ -80,7 +81,7 @@ class UserDestroyer
           end
 
           StaffActionLogger.new(@actor == user ? Discourse.system_user : @actor).log_user_deletion(user, opts.slice(:context))
-          DiscourseBus.publish "/file-change", ["refresh"], user_ids: [user.id]
+          MessageBus.publish "/file-change", ["refresh"], user_ids: [user.id]
         end
       end
     end

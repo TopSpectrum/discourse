@@ -1,4 +1,5 @@
-export default Discourse.View.extend({
+
+export default Ember.View.extend({
   templateName: 'share',
   elementId: 'share-link',
   classNameBindings: ['hasLink'],
@@ -14,14 +15,14 @@ export default Discourse.View.extend({
   }.property('controller.type', 'controller.postNumber'),
 
   hasLink: function() {
-    if (this.present('controller.link')) return 'visible';
+    if (!Ember.isEmpty(this.get('controller.link'))) return 'visible';
     return null;
   }.property('controller.link'),
 
   linkChanged: function() {
-    var self=this;
-    if (this.present('controller.link')) {
-      Em.run.next(function(){
+    const self = this;
+    if (!Ember.isEmpty(this.get('controller.link'))) {
+      Em.run.next(function() {
         if (!self.capabilities.touch) {
           var $linkInput = $('#share-link input');
           $linkInput.val(self.get('controller.link'));
@@ -34,21 +35,24 @@ export default Discourse.View.extend({
           var $linkForTouch = $('#share-link .share-for-touch a');
           $linkForTouch.attr('href',self.get('controller.link'));
           $linkForTouch.html(self.get('controller.link'));
+          var range = window.document.createRange();
+          range.selectNode($linkForTouch[0]);
+          window.getSelection().addRange(range);
         }
       });
     }
   }.observes('controller.link'),
 
   didInsertElement: function() {
-    var shareView = this,
+    var self = this,
         $html = $('html');
 
     $html.on('mousedown.outside-share-link', function(e) {
       // Use mousedown instead of click so this event is handled before routing occurs when a
       // link is clicked (which is a click event) while the share dialog is showing.
-      if (shareView.$().has(e.target).length !== 0) { return; }
+      if (self.$().has(e.target).length !== 0) { return; }
 
-      shareView.get('controller').send('close');
+      self.get('controller').send('close');
       return true;
     });
 
@@ -91,16 +95,16 @@ export default Discourse.View.extend({
         $shareLink.css({left: "" + x + "px"});
       }
 
-      shareView.set('controller.link', url);
-      shareView.set('controller.postNumber', postNumber);
-      shareView.set('controller.date', date);
+      self.set('controller.link', url);
+      self.set('controller.postNumber', postNumber);
+      self.set('controller.date', date);
 
       return false;
     });
 
     $html.on('keydown.share-view', function(e){
       if (e.keyCode === 27) {
-        shareView.get('controller').send('close');
+        self.get('controller').send('close');
       }
     });
   },

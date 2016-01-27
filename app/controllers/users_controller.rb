@@ -1,6 +1,5 @@
 require_dependency 'discourse_hub'
 require_dependency 'user_name_suggester'
-require_dependency 'avatar_upload_service'
 require_dependency 'rate_limiter'
 
 class UsersController < ApplicationController
@@ -38,6 +37,12 @@ class UsersController < ApplicationController
     topic_id = params[:include_post_count_for].to_i
     if topic_id != 0
       user_serializer.topic_post_count = {topic_id => Post.where(topic_id: topic_id, user_id: @user.id).count }
+    end
+
+    # This is a hack to get around a Rails issue where values with periods aren't handled correctly
+    # when used as part of a route.
+    if params[:external_id] and params[:external_id].ends_with? '.json'
+      return render_json_dump(user_serializer)
     end
 
     respond_to do |format|
@@ -157,29 +162,42 @@ class UsersController < ApplicationController
       redirect_to path("/users/#{current_user.username}/#{params[:path]}")
       return
     end
-    raise Discourse::NotFound.new
+    raise Discourse::NotFound
   end
 
   def invited
     inviter = fetch_user_from_params
     offset = params[:offset].to_i || 0
+    filter_by = params[:filter]
 
-    invites = if guardian.can_see_invite_details?(inviter)
-      Invite.find_all_invites_from(inviter, offset)
+    invites = if guardian.can_see_invite_details?(inviter) && filter_by == "pending"
+      Invite.find_pending_invites_from(inviter, offset)
     else
       Invite.find_redeemed_invites_from(inviter, offset)
     end
 
-    invites = invites.filter_by(params[:filter])
+    invites = invites.filter_by(params[:search])
     render_json_dump invites: serialize_data(invites.to_a, InviteSerializer),
                      can_see_invite_details: guardian.can_see_invite_details?(inviter)
   end
 
+  def invited_count
+    inviter = fetch_user_from_params
+
+    pending_count = Invite.find_pending_invites_count(inviter)
+    redeemed_count = Invite.find_redeemed_invites_count(inviter)
+
+    render json: {counts: { pending: pending_count, redeemed: redeemed_count,
+                            total: (pending_count.to_i + redeemed_count.to_i) } }
+  end
+
   def is_local_username
-    params.require(:username)
-    u = params[:username].downcase
-    r = User.exec_sql('select 1 from users where username_lower = ?', u).values
-    render json: {valid: r.length == 1}
+    users = params[:usernames]
+    users = [params[:username]] if users.blank?
+    users.each(&:downcase!)
+
+    result = User.where(username_lower: users).pluck(:username_lower)
+    render json: {valid: result}
   end
 
   def render_available_true
@@ -222,6 +240,14 @@ class UsersController < ApplicationController
 
     if params[:password] && params[:password].length > User.max_password_length
       return fail_with("login.password_too_long")
+    end
+
+    if params[:email] && params[:email].length > 254 + 1 + 253
+      return fail_with("login.email_too_long")
+    end
+
+    if SiteSetting.reserved_usernames.split("|").include? params[:username].downcase
+      return fail_with("login.reserved_username")
     end
 
     user = User.new(user_params)
@@ -346,8 +372,7 @@ class UsersController < ApplicationController
   end
 
   def admin_login
-
-    unless SiteSetting.enable_sso && !current_user
+    if current_user
       return redirect_to path("/")
     end
 
@@ -436,7 +461,7 @@ class UsersController < ApplicationController
   end
 
   def account_created
-    @message = session['user_created_message']
+    @message = session['user_created_message'] || I18n.t('activation.missing_session')
     expires_now
     render layout: 'no_ember'
   end
@@ -459,13 +484,12 @@ class UsersController < ApplicationController
       end
 
     else
-      flash[:error] = I18n.t('activation.already_done')
+      flash.now[:error] = I18n.t('activation.already_done')
     end
     render layout: 'no_ember'
   end
 
   def send_activation_email
-
     RateLimiter.new(nil, "activate-hr-#{request.remote_ip}", 30, 1.hour).performed!
     RateLimiter.new(nil, "activate-min-#{request.remote_ip}", 6, 1.minute).performed!
 
@@ -491,62 +515,44 @@ class UsersController < ApplicationController
 
     results = UserSearch.new(term, topic_id: topic_id, topic_allowed_users: topic_allowed_users, searching_user: current_user).search
 
-    user_fields = [:username, :upload_avatar_template, :uploaded_avatar_id]
+    user_fields = [:username, :upload_avatar_template]
     user_fields << :name if SiteSetting.enable_names?
 
-    to_render = { users: results.as_json(only: user_fields, methods: :avatar_template) }
+    to_render = { users: results.as_json(only: user_fields, methods: [:avatar_template]) }
 
     if params[:include_groups] == "true"
-      to_render[:groups] = Group.search_group(term, current_user).map {|m| {:name=>m.name, :usernames=> m.usernames.split(",")} }
+      to_render[:groups] = Group.search_group(term, current_user).map { |m| { name: m.name, usernames: m.usernames.split(",") } }
     end
 
     render json: to_render
   end
 
-  def upload_user_image
-    params.require(:image_type)
-    user = fetch_user_from_params
-    guardian.ensure_can_edit!(user)
-
-    file = params[:file] || params[:files].first
-
-    # HACK FOR IE9 to prevent the "download dialog"
-    response.headers["Content-Type"] = "text/plain" if request.user_agent =~ /MSIE 9/
-
-    begin
-      image = build_user_image_from(file)
-    rescue Discourse::InvalidParameters
-      return render status: 422, text: I18n.t("upload.images.unknown_image_type")
-    end
-
-    upload = Upload.create_for(user.id, image.file, image.filename, image.filesize)
-
-    if upload.errors.empty?
-      case params[:image_type]
-      when "avatar"
-        upload_avatar_for(user, upload)
-      when "profile_background"
-        upload_profile_background_for(user.user_profile, upload)
-      when "card_background"
-        upload_card_background_for(user.user_profile, upload)
-      end
-    else
-      render status: 422, text: upload.errors.full_messages
-    end
-  end
+  AVATAR_TYPES_WITH_UPLOAD ||= %w{uploaded custom gravatar}
 
   def pick_avatar
     user = fetch_user_from_params
     guardian.ensure_can_edit!(user)
+
+    type = params[:type]
     upload_id = params[:upload_id]
 
     user.uploaded_avatar_id = upload_id
 
-    # ensure we associate the custom avatar properly
-    if upload_id && !user.user_avatar.contains_upload?(upload_id)
-      user.user_avatar.custom_upload_id = upload_id
+    if AVATAR_TYPES_WITH_UPLOAD.include?(type)
+      # make sure the upload exists
+      unless Upload.where(id: upload_id).exists?
+        return render_json_error I18n.t("avatar.missing")
+      end
+
+      if type == "gravatar"
+        user.user_avatar.gravatar_upload_id = upload_id
+      else
+        user.user_avatar.custom_upload_id = upload_id
+      end
     end
+
     user.save!
+    user.user_avatar.save!
 
     render json: success_json
   end
@@ -555,16 +561,16 @@ class UsersController < ApplicationController
     user = fetch_user_from_params
     guardian.ensure_can_edit!(user)
 
-    image_type = params.require(:image_type)
-    if image_type == 'profile_background'
+    case params.require(:type)
+    when "profile_background"
       user.user_profile.clear_profile_background
-    elsif image_type == 'card_background'
+    when "card_background"
       user.user_profile.clear_card_background
     else
-      raise Discourse::InvalidParameters.new(:image_type)
+      raise Discourse::InvalidParameters.new(:type)
     end
 
-    render nothing: true
+    render json: success_json
   end
 
   def destroy
@@ -577,7 +583,7 @@ class UsersController < ApplicationController
   end
 
   def read_faq
-    if(user = current_user)
+    if user = current_user
       user.user_stat.read_faq = 1.second.ago
       user.user_stat.save
     end
@@ -614,51 +620,23 @@ class UsersController < ApplicationController
       challenge
     end
 
-    def build_user_image_from(file)
-      source = if file.is_a?(String)
-                 is_api? ? :url : (raise Discourse::InvalidParameters)
-               else
-                 :image
-               end
-
-      AvatarUploadService.new(file, source)
-    end
-
-    def upload_avatar_for(user, upload)
-      render json: { upload_id: upload.id, url: upload.url, width: upload.width, height: upload.height }
-    end
-
-    def upload_profile_background_for(user_profile, upload)
-      user_profile.upload_profile_background(upload)
-      render json: { url: upload.url, width: upload.width, height: upload.height }
-    end
-
-    def upload_card_background_for(user_profile, upload)
-      user_profile.upload_card_background(upload)
-      render json: { url: upload.url, width: upload.width, height: upload.height }
-    end
-
     def respond_to_suspicious_request
       if suspicious?(params)
-        render(
-          json: {
-            success: true,
-            active: false,
-            message: I18n.t("login.activate_email", email: params[:email])
-          }
-        )
+        render json: {
+          success: true,
+          active: false,
+          message: I18n.t("login.activate_email", email: params[:email])
+        }
       end
     end
 
     def suspicious?(params)
       return false if current_user && is_api? && current_user.admin?
-
       honeypot_or_challenge_fails?(params) || SiteSetting.invite_only?
     end
 
     def honeypot_or_challenge_fails?(params)
       return false if is_api?
-
       params[:password_confirmation] != honeypot_value ||
       params[:challenge] != challenge_value.try(:reverse)
     end

@@ -3,11 +3,13 @@ import AddArchetypeClass from 'discourse/mixins/add-archetype-class';
 import ClickTrack from 'discourse/lib/click-track';
 import { listenForViewEvent } from 'discourse/lib/app-events';
 import { categoryBadgeHTML } from 'discourse/helpers/category-link';
+import Scrolling from 'discourse/mixins/scrolling';
 
-const TopicView = Discourse.View.extend(AddCategoryClass, AddArchetypeClass, Discourse.Scrolling, {
+const TopicView = Ember.View.extend(AddCategoryClass, AddArchetypeClass, Scrolling, {
   templateName: 'topic',
   topicBinding: 'controller.model',
-  userFiltersBinding: 'controller.userFilters',
+
+  userFilters: Ember.computed.alias('controller.model.userFilters'),
   classNameBindings: ['controller.multiSelect:multi-select',
                       'topic.archetype',
                       'topic.is_warning',
@@ -19,7 +21,7 @@ const TopicView = Discourse.View.extend(AddCategoryClass, AddArchetypeClass, Dis
 
   categoryFullSlug: Em.computed.alias('topic.category.fullSlug'),
 
-  postStream: Em.computed.alias('controller.postStream'),
+  postStream: Em.computed.alias('controller.model.postStream'),
 
   archetype: Em.computed.alias('topic.archetype'),
 
@@ -77,7 +79,7 @@ const TopicView = Discourse.View.extend(AddCategoryClass, AddArchetypeClass, Dis
 
   }.on('willDestroyElement'),
 
-  gotFocus: function(){
+  gotFocus: function() {
     if (Discourse.get('hasFocus')){
       this.scrolled();
     }
@@ -90,14 +92,10 @@ const TopicView = Discourse.View.extend(AddCategoryClass, AddArchetypeClass, Dis
   offset: 0,
   hasScrolled: Em.computed.gt("offset", 0),
 
-  /**
-    The user has scrolled the window, or it is finished rendering and ready for processing.
+  // The user has scrolled the window, or it is finished rendering and ready for processing.
+  scrolled() {
 
-    @method scrolled
-  **/
-  scrolled: function(){
-
-    if(this.isDestroyed || this.isDestroying) {
+    if (this.isDestroyed || this.isDestroying || this._state !== 'inDOM') {
       return;
     }
 
@@ -122,10 +120,6 @@ const TopicView = Discourse.View.extend(AddCategoryClass, AddArchetypeClass, Dis
     // Trigger a scrolled event
     this.appEvents.trigger('topic:scrolled', offset);
   },
-
-  topicTrackingState: function() {
-    return Discourse.TopicTrackingState.current();
-  }.property(),
 
   browseMoreMessage: function() {
     var opts = { latestLink: "<a href=\"" + Discourse.getURL("/latest") + "\">" + I18n.t("topic.view_latest_topics") + "</a>" },
@@ -171,7 +165,7 @@ function highlight(postNumber) {
   $contents.data("orig-color", origColor)
     .addClass('highlighted')
     .stop()
-    .animate({ backgroundColor: origColor }, 2500, 'swing', function(){
+    .animate({ backgroundColor: origColor }, 2500, 'swing', function() {
       $contents.removeClass('highlighted');
       $contents.css({'background-color': ''});
     });

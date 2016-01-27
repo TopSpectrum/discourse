@@ -1,78 +1,89 @@
-import ObjectController from 'discourse/controllers/object';
+import { exportUserArchive } from 'discourse/lib/export-csv';
 import CanCheckEmails from 'discourse/mixins/can-check-emails';
+import computed from 'ember-addons/ember-computed-decorators';
 
-export default ObjectController.extend(CanCheckEmails, {
+export default Ember.Controller.extend(CanCheckEmails, {
   indexStream: false,
-  needs: ['user-notifications', 'user_topics_list'],
+  pmView: false,
+  userActionType: null,
+  needs: ['user-notifications', 'user-topics-list'],
 
-  viewingSelf: function() {
-    return this.get('content.username') === Discourse.User.currentProp('username');
-  }.property('content.username'),
+  @computed("content.username")
+  viewingSelf(username) {
+    return username === Discourse.User.currentProp('username');
+  },
 
-  collapsedInfo: Em.computed.not('indexStream'),
+  @computed('indexStream', 'viewingSelf', 'forceExpand')
+  collapsedInfo(indexStream, viewingSelf, forceExpand){
+    return (!indexStream || viewingSelf) && !forceExpand;
+  },
 
-  websiteName: function() {
-    var website = this.get('website');
-    if (Em.isEmpty(website)) { return; }
-    return this.get('website').split("/")[2];
-  }.property('website'),
+  linkWebsite: Em.computed.not('model.isBasic'),
 
-  linkWebsite: Em.computed.not('isBasic'),
+  @computed("model.trust_level")
+  removeNoFollow(trustLevel) {
+    return trustLevel > 2 && !this.siteSettings.tl3_links_no_follow;
+  },
 
-  canSeePrivateMessages: Ember.computed.or('viewingSelf', 'currentUser.admin'),
+  @computed('viewingSelf', 'currentUser.admin')
+  canSeePrivateMessages(viewingSelf, isAdmin) {
+    return this.siteSettings.enable_private_messages && (viewingSelf || isAdmin);
+  },
+
   canSeeNotificationHistory: Em.computed.alias('canSeePrivateMessages'),
 
-  showBadges: function() {
-    return Discourse.SiteSettings.enable_badges && (this.get('content.badge_count') > 0);
-  }.property('content.badge_count'),
+  @computed("content.badge_count")
+  showBadges(badgeCount) {
+    return Discourse.SiteSettings.enable_badges && badgeCount > 0;
+  },
 
-  privateMessageView: function() {
-    return (this.get('userActionType') === Discourse.UserAction.TYPES.messages_sent) ||
-           (this.get('userActionType') === Discourse.UserAction.TYPES.messages_received);
-  }.property('userActionType'),
+  @computed("userActionType")
+  privateMessageView(userActionType) {
+    return (userActionType === Discourse.UserAction.TYPES.messages_sent) ||
+           (userActionType === Discourse.UserAction.TYPES.messages_received);
+  },
 
-  canInviteToForum: function() {
+  @computed()
+  canInviteToForum() {
     return Discourse.User.currentProp('can_invite_to_forum');
-  }.property(),
+  },
 
-  canDeleteUser: function() {
-    return this.get('can_be_deleted') && this.get('can_delete_all_posts');
-  }.property('can_be_deleted', 'can_delete_all_posts'),
+  canDeleteUser: Ember.computed.and("model.can_be_deleted", "model.can_delete_all_posts"),
 
-  publicUserFields: function() {
-    var siteUserFields = this.site.get('user_fields');
+  @computed('model.user_fields.@each.value')
+  publicUserFields() {
+    const siteUserFields = this.site.get('user_fields');
     if (!Ember.isEmpty(siteUserFields)) {
-      var userFields = this.get('user_fields');
-      return siteUserFields.filterProperty('show_on_profile', true).sortBy('id').map(function(uf) {
-        var val = userFields ? userFields[uf.get('id').toString()] : null;
-        if (Ember.isEmpty(val)) {
-          return null;
-        } else {
-          return Ember.Object.create({value: val, field: uf});
-        }
+      const userFields = this.get('model.user_fields');
+      return siteUserFields.filterProperty('show_on_profile', true).sortBy('position').map(field => {
+        const value = userFields ? userFields[field.get('id').toString()] : null;
+        return Ember.isEmpty(value) ? null : Ember.Object.create({ value, field });
       }).compact();
     }
-  }.property('user_fields.@each.value'),
+  },
 
   privateMessagesActive: Em.computed.equal('pmView', 'index'),
   privateMessagesMineActive: Em.computed.equal('pmView', 'mine'),
   privateMessagesUnreadActive: Em.computed.equal('pmView', 'unread'),
 
   actions: {
-    adminDelete: function() {
-      Discourse.AdminUser.find(this.get('username').toLowerCase()).then(function(user){
-        user.destroy({deletePosts: true});
-      });
+    expandProfile() {
+      this.set('forceExpand', true);
     },
 
-    exportUserArchive: function() {
+    adminDelete() {
+      Discourse.AdminUser.find(this.get('model.username').toLowerCase())
+                         .then(user => user.destroy({deletePosts: true}));
+    },
+
+    exportUserArchive() {
       bootbox.confirm(
         I18n.t("admin.export_csv.user_archive_confirm"),
         I18n.t("no_value"),
         I18n.t("yes_value"),
         function(confirmed) {
           if (confirmed) {
-            Discourse.ExportCsv.exportUserArchive();
+            exportUserArchive();
           }
         }
       );

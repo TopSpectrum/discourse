@@ -16,17 +16,21 @@ export default Ember.Object.extend({
     if(topic.get('bookmarked')){
       var url = topic.get('url');
       var postNumbers = topic.get('bookmarked_post_numbers');
+      var extraClasses = "";
       if(postNumbers && postNumbers[0] > 1) {
         url += '/' + postNumbers[0];
+      } else {
+        extraClasses = "op-bookmark";
       }
-      results.push({icon: 'bookmark', key: 'bookmarked', href: url});
+
+      results.push({extraClasses: extraClasses, icon: 'bookmark', key: 'bookmarked', href: url});
     }
 
-    if(topic.get('closed')){
+    if (topic.get('closed') && topic.get('archived')) {
+      results.push({icon: 'lock', key: 'locked_and_archived'});
+    } else if(topic.get('closed')){
       results.push({icon: 'lock', key: 'locked'});
-    }
-
-    if(topic.get('archived')){
+    } else if(topic.get('archived')){
       results.push({icon: 'lock', key: 'archived'});
     }
 

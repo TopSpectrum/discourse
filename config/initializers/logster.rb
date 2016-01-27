@@ -7,6 +7,12 @@ if Rails.env.production?
 
     /^ActionController::UnknownFormat/,
 
+    /^AbstractController::ActionNotFound/,
+
+    # alihack is really annoying, nothing really we can do about this
+    # (795: unexpected token at 'alihack<%eval request("alihack.com")%> '):
+    /^ActionDispatch::ParamsParser::ParseError/,
+
     # ignore any empty JS errors that contain blanks or zeros for line and column fields
     #
     # Line:
@@ -14,14 +20,18 @@ if Rails.env.production?
     #
     /(?m).*?Line: (?:\D|0).*?Column: (?:\D|0)/,
 
-    # suppress trackback spam bots
-    Logster::IgnorePattern.new("Can't verify CSRF token authenticity", { REQUEST_URI: /\/trackback\/$/ }),
-    # suppress trackback spam bots submitting to random URLs
-    # test for the presence of these params: url, title, excerpt, blog_name
-    Logster::IgnorePattern.new("Can't verify CSRF token authenticity", { params: { url: /./, title: /./, excerpt: /./, blog_name: /./} }),
+    # also empty JS errors
+    /^Script error\..*Line: 0/m,
 
-    # API calls, TODO fix this in rails
-    Logster::IgnorePattern.new("Can't verify CSRF token authenticity", { REQUEST_URI: /api_key/ })
+    # CSRF errors are not providing enough data
+    # suppress unconditionally for now
+    /^Can't verify CSRF token authenticity$/,
+
+    # 404s can be dealt with elsewise
+    /^ActiveRecord::RecordNotFound /,
+
+    # bad asset requested, no need to log
+    /^ActionController::BadRequest /
   ]
 end
 
@@ -43,3 +53,5 @@ Logster.config.current_context = lambda{|env,&blk|
 
 # TODO logster should be able to do this automatically
 Logster.config.subdirectory = "#{GlobalSetting.relative_url_root}/logs"
+
+Logster.config.application_version = Discourse.git_version

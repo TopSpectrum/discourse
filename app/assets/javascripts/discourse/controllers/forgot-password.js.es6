@@ -1,11 +1,10 @@
 import ModalFunctionality from 'discourse/mixins/modal-functionality';
-import DiscourseController from 'discourse/controllers/controller';
 
-export default DiscourseController.extend(ModalFunctionality, {
+export default Ember.Controller.extend(ModalFunctionality, {
 
   // You need a value in the field to submit it.
   submitDisabled: function() {
-    return this.blank('accountEmailOrUsername') || this.get('disabled');
+    return Ember.isEmpty(this.get('accountEmailOrUsername')) || this.get('disabled');
   }.property('accountEmailOrUsername', 'disabled'),
 
   actions: {
@@ -18,7 +17,7 @@ export default DiscourseController.extend(ModalFunctionality, {
 
       var success = function(data) {
         // don't tell people what happened, this keeps it more secure (ensure same on server)
-        var escaped = Handlebars.Utils.escapeExpression(self.get('accountEmailOrUsername'));
+        var escaped = Discourse.Utilities.escapeExpression(self.get('accountEmailOrUsername'));
         var isEmail = self.get('accountEmailOrUsername').match(/@/);
 
         var key = 'forgot_password.complete_' + (isEmail ? 'email' : 'username');

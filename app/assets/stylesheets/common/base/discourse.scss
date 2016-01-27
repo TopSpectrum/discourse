@@ -4,8 +4,13 @@ img.avatar {
 
 .container {
   @extend .clearfix;
+}
+
+.wrap {
+  @extend .clearfix;
   margin-right: auto;
   margin-left: auto;
+  padding: 0 8px;
   .contents {
     position: relative;
   }
@@ -27,9 +32,9 @@ small {
 
 
 blockquote {
-  background-color: scale-color-diff();
-  border-left: 5px solid darken(scale-color-diff(), 10%);
+  @include post-aside;
   overflow: hidden;
+  clear: both;
 }
 
 a.no-href {
@@ -64,14 +69,17 @@ body {
     }
   }
 
+  // the default for table cells in topic list
+  // is scale-color($primary, $lightness: 50%)
+  // numbers get dimmer as they get colder
   .coldmap-high {
-    color: #91CDF5 !important;
+    color: dark-light-choose(scale-color($primary, $lightness: 70%), scale-color($secondary, $lightness: 30%)) !important;
   }
   .coldmap-med {
-    color: #91CDF5 !important;
+    color: dark-light-choose(scale-color($primary, $lightness: 60%), scale-color($secondary, $lightness: 40%)) !important;
   }
   .coldmap-low {
-    color: #91AFD2 !important;
+    color: dark-light-choose(scale-color($primary, $lightness: 50%), scale-color($secondary, $lightness: 50%)) !important;
   }
   .heatmap-high {
     color: #fe7a15 !important;
@@ -98,7 +106,7 @@ body {
     margin: 0 10px 0 10px;
   }
 
-.message {
+  .message {
     @include border-radius-all(8px);
     background-color: $secondary;
     padding: 14px;
@@ -110,7 +118,8 @@ body {
       font-size: 1.429em;
     }
   }
-    #footer {
+
+  #footer {
     .container {
       height: 50px;
       .contents {
@@ -126,51 +135,51 @@ body {
     transition:none !important;
   }
 
-.tip {
-  display: inline-block;
-  &.good {
-    color: $success;
-  }
-  &.bad {
-    color: $danger;
-  }
-}
-
-
-#wmd-input {
-  resize: none;
-}
-
-#pagedown-editor {
-  width: 540px;
-  background-color: $secondary;
-  padding: 0 10px 13px 10px;
-  border: 1px solid scale-color-diff();
-  .preview {
-    margin-top: 8px;
-    border: 1px dashed scale-color-diff();
-    padding: 8px 8px 0 8px;
-    p {
-      margin: 0 0 10px 0;
+  .tip {
+    display: inline-block;
+    &.good {
+      color: $success;
+    }
+    &.bad {
+      color: $danger;
     }
   }
-  .preview.hidden {
-    display: none;
+
+  input[type].invalid {
+    background-color: dark-light-choose(scale-color($danger, $lightness: 80%), scale-color($danger, $lightness: -60%));
   }
-}
 
+  .wmd-input {
+    resize: none;
+  }
 
-.avatar-wrapper {
-  background-color: $secondary;
-  display: inline-block;
-  border-radius: 50%;
-}
+  .pagedown-editor {
+    width: 540px;
+    background-color: $secondary;
+    padding: 0 10px 13px 10px;
+    border: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
+    .preview {
+      margin-top: 8px;
+      border: 1px dashed dark-light-diff($primary, $secondary, 90%, -60%);
+      padding: 8px 8px 0 8px;
+      p {
+        margin: 0 0 10px 0;
+      }
+    }
+    .preview.hidden {
+      display: none;
+    }
+  }
 
-.profiler-results.profiler-left {
-  top: 60px !important;
-}
+  .avatar-wrapper {
+    background-color: $secondary;
+    display: inline-block;
+    border-radius: 50%;
+  }
 
-
+  .profiler-results.profiler-left {
+    top: 60px !important;
+  }
 }
 
 .unread-private-messages {

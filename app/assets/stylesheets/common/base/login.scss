@@ -36,7 +36,7 @@
         float: auto;
       }
       p {
-        color: scale-color($primary, $lightness: 50%);
+        color: dark-light-choose(scale-color($primary, $lightness: 50%), scale-color($secondary, $lightness: 50%));
         margin: 0;
       }
     }
@@ -49,7 +49,7 @@
 button#login-link, button#new-account-link
 {
   background: transparent;
-  padding: 0;
+  padding-left: 0;
   margin-left: 20px;
-  color: scale-color($primary, $lightness: 35%);
+  color: dark-light-choose(scale-color($primary, $lightness: 35%), scale-color($secondary, $lightness: 65%));
 }

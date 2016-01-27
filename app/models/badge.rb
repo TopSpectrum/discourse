@@ -20,6 +20,12 @@ class Badge < ActiveRecord::Base
   GoodShare = 22
   GreatShare = 23
   OneYearAnniversary = 24
+  Promoter = 25
+  Campaigner = 26
+  Champion = 27
+  PopularLink = 28
+  HotLink = 29
+  FamousLink = 30
 
   # other consts
   AutobiographerMinBioLength = 10
@@ -189,6 +195,22 @@ SQL
      HAVING COUNT(p.id) > 0
 SQL
 
+    def self.invite_badge(count,trust_level)
+"
+    SELECT u.id user_id, current_timestamp granted_at
+    FROM users u
+    WHERE u.id IN (
+      SELECT invited_by_id
+      FROM invites i
+      JOIN users u2 ON u2.id = i.user_id
+      WHERE i.deleted_at IS NULL AND u2.active AND u2.trust_level >= #{trust_level.to_i} AND not u2.blocked
+      GROUP BY invited_by_id
+      HAVING COUNT(*) > #{count.to_i}
+    ) AND u.active AND NOT u.blocked AND u.id > 0 AND
+      (:backfill OR u.id IN (:user_ids) )
+"
+    end
+
     def self.like_badge(count, is_topic)
       # we can do better with dates, but its hard work
 "
@@ -224,6 +246,19 @@ SQL
     JOIN incoming_links i2 ON i2.id = views.i_id
 SQL
     end
+
+    def self.linking_badge(count)
+      <<-SQL
+          SELECT tl.user_id, post_id, MIN(tl.created_at) granted_at
+            FROM topic_links tl
+            JOIN posts p  ON p.id = post_id    AND p.deleted_at IS NULL
+            JOIN topics t ON t.id = p.topic_id AND t.deleted_at IS NULL AND t.archetype <> 'private_message'
+           WHERE NOT tl.internal
+             AND tl.clicks >= #{count}
+        GROUP BY tl.user_id, tl.post_id
+      SQL
+    end
+
   end
 
   belongs_to :badge_type
@@ -290,6 +325,10 @@ SQL
     end
   end
 
+  def self.ensure_consistency!
+    Badge.find_each(&:reset_grant_count!)
+  end
+
   protected
   def ensure_not_system
     unless id
@@ -322,6 +361,7 @@ end
 #  show_posts        :boolean          default(FALSE), not null
 #  system            :boolean          default(FALSE), not null
 #  image             :string(255)
+#  long_description  :text
 #
 # Indexes
 #

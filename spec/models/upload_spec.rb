@@ -2,12 +2,6 @@ require 'spec_helper'
 require 'digest/sha1'
 
 describe Upload do
-  it { is_expected.to belong_to :user }
-
-  it { is_expected.to have_many :post_uploads }
-  it { is_expected.to have_many :posts }
-
-  it { is_expected.to have_many :optimized_images }
 
   let(:upload) { build(:upload) }
   let(:thumbnail) { build(:optimized_image, upload: upload) }
@@ -51,7 +45,10 @@ describe Upload do
 
   context "#create_for" do
 
-    before { Upload.stubs(:fix_image_orientation) }
+    before do
+      Upload.stubs(:fix_image_orientation)
+      ImageOptim.any_instance.stubs(:optimize_image!)
+    end
 
     it "does not create another upload if it already exists" do
       Upload.expects(:find_by).with(sha1: image_sha1).returns(upload)
@@ -69,13 +66,6 @@ describe Upload do
       ImageSizer.expects(:resize)
       image.expects(:rewind).twice
       Upload.create_for(user_id, image, image_filename, image_filesize)
-    end
-
-    it "does not create an upload when there is an error with FastImage" do
-      FileHelper.expects(:is_image?).returns(true)
-      Upload.expects(:save).never
-      upload = Upload.create_for(user_id, attachment, attachment_filename, attachment_filesize)
-      expect(upload.errors.size).to be > 0
     end
 
     it "does not compute width & height for non-image" do
@@ -106,7 +96,6 @@ describe Upload do
       expect(upload.user_id).to eq(user_id)
       expect(upload.original_filename).to eq(image_filename)
       expect(upload.filesize).to eq(image_filesize)
-      expect(upload.sha1).to eq(image_sha1)
       expect(upload.width).to eq(244)
       expect(upload.height).to eq(66)
       expect(upload.url).to eq(url)
@@ -146,11 +135,6 @@ describe Upload do
       Rails.configuration.action_controller.stubs(:asset_host).returns("http://my.cdn.com")
       Upload.expects(:find_by).with(url: "/uploads/default/1/02395732905.jpg").returns(nil).once
       Upload.get_from_url("http://my.cdn.com/uploads/default/1/02395732905.jpg")
-    end
-
-    it "works only when the file has been uploaded" do
-      Upload.expects(:find_by).never
-      Upload.get_from_url("http://domain.com/my/file.txt")
     end
 
   end

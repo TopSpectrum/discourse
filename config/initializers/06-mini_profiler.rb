@@ -3,8 +3,11 @@ if Rails.configuration.respond_to?(:load_mini_profiler) && Rails.configuration.l
   require 'rack-mini-profiler'
   require 'flamegraph'
 
-  # TODO support Ruby 2.2 once bundler fixes itself
-  require 'memory_profiler' if RUBY_VERSION >= "2.1.0" && RUBY_VERSION < "2.2.0"
+  begin
+    require 'memory_profiler' if RUBY_VERSION >= "2.1.0"
+  rescue => e
+     STDERR.put "#{e} failed to require mini profiler"
+  end
 
   # initialization is skipped so trigger it
   Rack::MiniProfilerRails.initialize!(Rails.application)
@@ -31,7 +34,11 @@ if defined?(Rack::MiniProfiler)
     /^\/cdn_asset/,
     /^\/logs/,
     /^\/site_customizations/,
-    /^\/uploads/
+    /^\/uploads/,
+    /^\/javascripts\//,
+    /^\/images\//,
+    /^\/stylesheets\//,
+    /^\/favicon\/proxied/
   ]
 
   # For our app, let's just show mini profiler always, polling is chatty so nuke that
@@ -86,4 +93,14 @@ if defined?(Rack::MiniProfiler)
   # ActiveSupport::Notifications.subscribe(/.*/, inst)
 
   # Rack::MiniProfiler.profile_method ActionView::PathResolver, 'find_templates'
+end
+
+
+if ENV["PRINT_EXCEPTIONS"]
+  trace      = TracePoint.new(:raise) do |tp|
+    puts tp.raised_exception
+    puts tp.raised_exception.backtrace.join("\n")
+    puts
+  end
+  trace.enable
 end

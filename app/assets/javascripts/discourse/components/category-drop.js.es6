@@ -1,11 +1,9 @@
+import { setting } from 'discourse/lib/computed';
 var get = Ember.get;
 
 export default Ember.Component.extend({
   classNameBindings: ['category::no-category', 'categories:has-drop','categoryStyle'],
-
-  categoryStyle: function(){
-    return Discourse.SiteSettings.category_style;
-  }.property(),
+  categoryStyle: setting('category_style'),
 
   tagName: 'li',
 
@@ -49,12 +47,12 @@ export default Ember.Component.extend({
 
       if (color) {
         var style = "";
-        if (color) { style += "background-color: #" + color + ";" }
-        return style;
+        if (color) { style += "background-color: #" + color + ";"; }
+        return style.htmlSafe();
       }
     }
 
-    return "background-color: #eee;";
+    return "background-color: #eee;".htmlSafe();
   }.property('category'),
 
   badgeStyle: function() {
@@ -68,11 +66,11 @@ export default Ember.Component.extend({
         var style = "";
         if (color) { style += "background-color: #" + color + "; border-color: #" + color + ";"; }
         if (textColor) { style += "color: #" + textColor + "; "; }
-        return style;
+        return style.htmlSafe();
       }
     }
 
-    return "background-color: #eee; color: #333";
+    return "background-color: #eee; color: #333".htmlSafe();
   }.property('category'),
 
   clickEventName: function() {

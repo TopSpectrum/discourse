@@ -41,6 +41,9 @@ class UserNotifications < ActionMailer::Base
     build_email( user.email, template: "user_notifications.account_created", email_token: opts[:email_token])
   end
 
+  def short_date(dt)
+    I18n.l(dt, format: :short)
+  end
 
   def digest(user, opts={})
     @user = user
@@ -48,10 +51,10 @@ class UserNotifications < ActionMailer::Base
 
     min_date = opts[:since] || @user.last_emailed_at || @user.last_seen_at || 1.month.ago
 
-    @site_name = SiteSetting.title
+    @site_name = SiteSetting.email_prefix.presence || SiteSetting.title
 
     @header_color = ColorScheme.hex_for_name('header_background')
-    @last_seen_at = I18n.l(@user.last_seen_at || @user.created_at, format: :short)
+    @last_seen_at = short_date(@user.last_seen_at || @user.created_at)
 
     # A list of topics to show the user
     @featured_topics = Topic.for_digest(user, min_date, limit: SiteSetting.digest_topics, top_order: true).to_a
@@ -80,8 +83,8 @@ class UserNotifications < ActionMailer::Base
       build_email user.email,
                   from_alias: I18n.t('user_notifications.digest.from', site_name: SiteSetting.title),
                   subject: I18n.t('user_notifications.digest.subject_template',
-                  site_name: @site_name,
-                  date: I18n.l(Time.now, format: :short))
+                                  site_name: @site_name,
+                                  date: short_date(Time.now))
     end
   end
 
@@ -142,7 +145,7 @@ class UserNotifications < ActionMailer::Base
       title: post.topic.title,
       post: post,
       username: post.user.username,
-      from_alias: (SiteSetting.enable_names && SiteSetting.display_name_on_posts && !post.user.name.empty?) ? post.user.name : post.user.username,
+      from_alias: (SiteSetting.enable_names && SiteSetting.display_name_on_posts && post.user.name.present?) ? post.user.name : post.user.username,
       allow_reply_by_email: true,
       use_site_subject: true,
       add_re_to_subject: true,
@@ -188,7 +191,8 @@ class UserNotifications < ActionMailer::Base
 
     user_name = @notification.data_hash[:original_username]
     if @post && SiteSetting.enable_names && SiteSetting.display_name_on_posts
-      user_name = User.find_by(id: @post.user_id).name if !User.find_by(id: @post.user_id).name.empty?
+      name = User.where(id: @post.user_id).pluck(:name).first
+      user_name = name unless name.blank?
     end
 
     notification_type = opts[:notification_type] || Notification.types[@notification.notification_type].to_s
@@ -233,7 +237,7 @@ class UserNotifications < ActionMailer::Base
 
     # category name
     category = Topic.find_by(id: post.topic_id).category
-    if opts[:show_category_in_subject] && post.topic_id && !category.uncategorized?
+    if opts[:show_category_in_subject] && post.topic_id && category && !category.uncategorized?
       show_category_in_subject = category.name
 
       # subcategory case
@@ -285,6 +289,7 @@ class UserNotifications < ActionMailer::Base
       context: context,
       username: username,
       add_unsubscribe_link: true,
+      unsubscribe_url: post.topic.unsubscribe_url,
       allow_reply_by_email: allow_reply_by_email,
       use_site_subject: use_site_subject,
       add_re_to_subject: add_re_to_subject,
@@ -299,9 +304,7 @@ class UserNotifications < ActionMailer::Base
     }
 
     # If we have a display name, change the from address
-    if from_alias.present?
-      email_opts[:from_alias] = from_alias
-    end
+    email_opts[:from_alias] = from_alias if from_alias.present?
 
     TopicUser.change(user.id, post.topic_id, last_emailed_post_number: post.post_number)
 

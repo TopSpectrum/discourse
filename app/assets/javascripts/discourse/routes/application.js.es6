@@ -1,4 +1,8 @@
+import { setting } from 'discourse/lib/computed';
+import logout from 'discourse/lib/logout';
 import showModal from 'discourse/lib/show-modal';
+import OpenComposer from "discourse/mixins/open-composer";
+import Category from 'discourse/models/category';
 
 function unlessReadOnly(method) {
   return function() {
@@ -10,11 +14,17 @@ function unlessReadOnly(method) {
   };
 }
 
-const ApplicationRoute = Discourse.Route.extend({
-
-  siteTitle: Discourse.computed.setting('title'),
+const ApplicationRoute = Discourse.Route.extend(OpenComposer, {
+  siteTitle: setting('title'),
 
   actions: {
+
+    logout() {
+      if (this.currentUser) {
+        this.currentUser.destroySession().then(() => logout(this.siteSettings, this.keyValueStore));
+      }
+    },
+
     _collectTitleTokens(tokens) {
       tokens.push(this.get('siteTitle'));
       Discourse.set('_docTitle', tokens.join(' - '));
@@ -50,30 +60,24 @@ const ApplicationRoute = Discourse.Route.extend({
     },
 
     error(err, transition) {
-      if (err.status === 404) {
-        // 404
-        this.intermediateTransitionTo('unknown');
-        return;
+      let xhr = {};
+      if (err.jqXHR) {
+        xhr = err.jqXHR;
       }
 
-      const exceptionController = this.controllerFor('exception'),
-            stack = err.stack;
+      const xhrOrErr = err.jqXHR ? xhr : err;
 
-      // If we have a stack call `toString` on it. It gives us a better
-      // stack trace since `console.error` uses the stack track of this
-      // error callback rather than the original error.
-      let errorString = err.toString();
-      if (stack) { errorString = stack.toString(); }
-
-      if (err.statusText) { errorString = err.statusText; }
+      const exceptionController = this.controllerFor('exception');
 
       const c = window.console;
       if (c && c.error) {
-        c.error(errorString);
+        c.error(xhrOrErr);
       }
-      exceptionController.setProperties({ lastTransition: transition, thrown: err });
+
+      exceptionController.setProperties({ lastTransition: transition, thrown: xhrOrErr });
 
       this.intermediateTransitionTo('exception');
+      return true;
     },
 
     showLogin: unlessReadOnly('handleShowLogin'),
@@ -98,13 +102,6 @@ const ApplicationRoute = Discourse.Route.extend({
       showModal('keyboard-shortcuts-help', { title: 'keyboard_shortcuts_help.title'});
     },
 
-    showSearchHelp() {
-      // TODO: @EvitTrout how do we get a loading indicator here?
-      Discourse.ajax("/static/search_help.html", { dataType: 'html' }).then(function(model){
-        showModal('searchHelp', { model });
-      });
-    },
-
     // Close the current modal, and destroy its state.
     closeModal() {
       this.render('hide-modal', { into: 'modal', outlet: 'modalBody' });
@@ -124,20 +121,21 @@ const ApplicationRoute = Discourse.Route.extend({
     },
 
     editCategory(category) {
-      const self = this;
-      Discourse.Category.reloadById(category.get('id')).then(function (model) {
-        self.site.updateCategory(model);
+      Category.reloadById(category.get('id')).then((atts) => {
+        const model = this.store.createRecord('category', atts.category);
+        model.setupGroupsAndPermissions();
+        this.site.updateCategory(model);
         showModal('editCategory', { model });
-        self.controllerFor('editCategory').set('selectedTab', 'general');
+        this.controllerFor('editCategory').set('selectedTab', 'general');
       });
     },
 
-    deleteSpammer: function (user) {
+    deleteSpammer(user) {
       this.send('closeModal');
       user.deleteAsSpammer(function() { window.location.reload(); });
     },
 
-    checkEmail: function (user) {
+    checkEmail(user) {
       user.checkEmail();
     },
 
@@ -146,6 +144,10 @@ const ApplicationRoute = Discourse.Route.extend({
             factory = this.container.lookupFactory('controller:' + controllerName);
 
       this.render(w, {into: 'modal/topic-bulk-actions', outlet: 'bulkOutlet', controller: factory ? controllerName : 'topic-bulk-actions'});
+    },
+
+    createNewTopicViaParams(title, body, category_id, category) {
+      this.openComposerWithParams(this.controllerFor('discovery/topics'), title, body, category_id, category);
     }
   },
 
@@ -167,7 +169,12 @@ const ApplicationRoute = Discourse.Route.extend({
   },
 
   handleShowCreateAccount() {
-    this._autoLogin('createAccount', 'create-account');
+    if (this.siteSettings.enable_sso) {
+      const returnPath = encodeURIComponent(window.location.pathname);
+      window.location = Discourse.getURL('/session/sso?return_path=' + returnPath);
+    } else {
+      this._autoLogin('createAccount', 'create-account');
+    }
   },
 
   _autoLogin(modal, modalClass, notAuto) {

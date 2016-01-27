@@ -1,7 +1,7 @@
-/* global asyncTest */
+/* global asyncTest, fixtures */
 
 import sessionFixtures from 'fixtures/session-fixtures';
-import siteFixtures from 'fixtures/site_fixtures';
+import siteFixtures from 'fixtures/site-fixtures';
 import HeaderView from 'discourse/views/header';
 
 function currentUser() {
@@ -37,8 +37,6 @@ var oldAvatar = Discourse.Utilities.avatarImg;
 function acceptance(name, options) {
   module("Acceptance: " + name, {
     setup: function() {
-      Ember.run(Discourse, Discourse.advanceReadiness);
-
       // Don't render avatars in acceptance tests, it's faster and no 404s
       Discourse.Utilities.avatarImg = () => "";
 
@@ -72,6 +70,8 @@ function acceptance(name, options) {
       if (options && options.teardown) {
         options.teardown.call(this);
       }
+      Discourse.User.resetCurrent();
+      Discourse.Site.resetCurrent(Discourse.Site.create(jQuery.extend(true, {}, fixtures['site.json'].site)));
 
       Discourse.Utilities.avatarImg = oldAvatar;
       Discourse.reset();
@@ -101,4 +101,19 @@ function fixture(selector) {
   return $("#qunit-fixture");
 }
 
-export { acceptance, controllerFor, asyncTestDiscourse, fixture, logIn, currentUser };
+function present(obj, text) {
+  ok(!Ember.isEmpty(obj), text);
+}
+
+function blank(obj, text) {
+  ok(Ember.isEmpty(obj), text);
+}
+
+export { acceptance,
+         controllerFor,
+         asyncTestDiscourse,
+         fixture,
+         logIn,
+         currentUser,
+         blank,
+         present };

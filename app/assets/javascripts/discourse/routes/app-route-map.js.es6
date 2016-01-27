@@ -10,6 +10,7 @@ export default function() {
     this.route('fromParamsNear', { path: '/:nearPost' });
   });
   this.resource('topicBySlug', { path: '/t/:slug' });
+  this.route('topicUnsubscribe', { path: '/t/:slug/:id/unsubscribe' });
 
   this.resource('discovery', { path: '/' }, function() {
     // top
@@ -79,7 +80,9 @@ export default function() {
       this.route('card-badge', { path: '/card-badge' });
     });
 
-    this.route('invited');
+    this.resource('userInvited', { path: '/invited' }, function() {
+      this.route('show', { path: '/:filter' });
+    });
   });
 
   this.route('signup', {path: '/signup'});
@@ -90,9 +93,13 @@ export default function() {
   this.route('privacy', {path: '/privacy'});
   this.route('guidelines', {path: '/guidelines'});
 
+  this.route('new-topic', {path: '/new-topic'});
+
   this.resource('badges', function() {
     this.route('show', {path: '/:id/:slug'});
   });
 
   this.resource('queued-posts', { path: '/queued-posts' });
+
+  this.route('full-page-search', {path: '/search'});
 }

@@ -76,6 +76,9 @@ module Jobs
       Excon.get(uri.to_s, response_block: streamer, read_timeout: 20, headers: CrawlTopicLink.request_headers(uri))
       result
 
+    rescue Excon::Errors::SocketError => ex
+      return result if ex.socket_error.is_a?(ReadEnough)
+      raise
     rescue ReadEnough
       result
     end
@@ -88,7 +91,8 @@ module Jobs
 
       # Look for a topic embed for the URL. If it exists, use its title and don't crawl
       topic_embed = TopicEmbed.where(embed_url: topic_link.url).includes(:topic).references(:topic).first
-      if topic_embed.present?
+      # topic could be deleted, so skip
+      if topic_embed && topic_embed.topic
         TopicLink.where(id: topic_link.id).update_all(['title = ?, crawled_at = CURRENT_TIMESTAMP', topic_embed.topic.title[0..255]])
         return
       end
@@ -115,7 +119,7 @@ module Jobs
               title.gsub!(/ +/, ' ')
               title.strip!
               if title.present?
-                crawled = (TopicLink.where(id: topic_link.id).update_all(['title = ?, crawled_at = CURRENT_TIMESTAMP', title[0..255]]) == 1)
+                crawled = (TopicLink.where(id: topic_link.id).update_all(['title = ?, crawled_at = CURRENT_TIMESTAMP', title[0..254]]) == 1)
               end
             end
           end

@@ -45,7 +45,8 @@ export default Em.Component.extend(StringBuffer, {
 
         var title = Em.get(l, 'title');
         if (!Em.isEmpty(title)) {
-          buffer.push(Handlebars.Utils.escapeExpression(title));
+          title = Discourse.Utilities.escapeExpression(title);
+          buffer.push(Discourse.Emoji.unescape(title));
         }
         if (clicks) {
           buffer.push("<span class='badge badge-notification clicks'>" + clicks + "</span>");
@@ -62,7 +63,7 @@ export default Em.Component.extend(StringBuffer, {
       buffer.push('</ul>');
     }
 
-    if ((links.length <= MAX_SHOWN || !collapsed) && this.get('canReplyAsNewTopic')) {
+    if (this.get('canReplyAsNewTopic')) {
       buffer.push("<a href class='reply-new'>" + iconHTML('plus') + I18n.t('post.reply_as_new_topic') + "</a>");
     }
   },

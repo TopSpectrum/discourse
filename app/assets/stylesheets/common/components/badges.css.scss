@@ -25,7 +25,7 @@
   &.bar { //bar category style
     line-height: 1.25;
     margin-right: 5px;
-    
+
     span.badge-category {
       color: $primary !important;
       padding: 3px;
@@ -52,23 +52,18 @@
 
 
   &.bullet { //bullet category style
-    line-height: 1;
+    display: inline-flex;
+    align-items: baseline;
     margin-right: 10px;
-
-    h3 & {
-      line-height: .9;
-    }
 
     span.badge-category {
       color: $primary !important;
-      vertical-align: text-top;
-      line-height: 1;
-      margin-left: 4px;
-      padding-left: 2px;
-      display: inline;
+      display: inline-block;
+      overflow: hidden;
+      text-overflow: ellipsis;
 
       #search-dropdown & {
-        margin-top: 0;
+        margin-top: -2px;
       }
 
       .extra-info-wrapper & {
@@ -77,9 +72,12 @@
    }
 
    .badge-category-parent-bg, .badge-category-bg {
-     display: inline-block;
      width: 10px;
      height: 10px;
+     margin-right: 5px;
+     display: inline-block;
+     line-height: 1;
+
      &:before {
        content: "\a0";
      }
@@ -88,6 +86,7 @@
    span {
      &.badge-category-parent-bg { //subcategory style
        width: 5px;
+       margin-right: 0;
        & + .badge-category-bg {
          width: 5px;
        }
@@ -104,6 +103,8 @@
 
     span {
       display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
 
       &.badge-category-bg, &.badge-category-parent-bg {
         position: absolute;
@@ -129,17 +130,6 @@
       }
     }
   }
-
-  span.badge-category {
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-
-    .d-dropdown & {
-      max-width: 100px;
-    }
-  }
-
 }
 
 // Category badge dropdown
@@ -168,12 +158,12 @@
     }
 
     li.bar>.badge-category {
-      background: dark-light-diff($primary, $secondary, 95%, -65%) !important;
+      background: dark-light-diff($primary, $secondary, 90%, -65%) !important;
       color: $primary !important;
     }
 
     li.bullet>.badge-category {
-      background: dark-light-diff($primary, $secondary, 95%, -65%) !important;
+      background: dark-light-diff($primary, $secondary, 90%, -65%) !important;
       color: $primary !important;
 
       .badge-category-bg {
@@ -195,7 +185,7 @@
       }
     }
     .cat {
-        line-height: 0;
+        line-height: 1;
       }
     .badge-wrapper {
       &.bar {
@@ -239,17 +229,17 @@
   font-size: 11px;
   line-height: 1;
   text-align: center;
-  background-color: scale-color($primary, $lightness: 70%);
+  background-color: dark-light-choose(scale-color($primary, $lightness: 70%), scale-color($secondary, $lightness: 70%));
   &[href] {
-  color: $secondary;
+    color: $secondary;
   }
 
   // New posts
 
   &.new-posts, &.unread-posts {
-    background-color: scale-color($tertiary, $lightness: 50%);
-    color: $secondary;
-    font-weight: normal;
+    background-color: dark-light-choose(scale-color($tertiary, $lightness: 50%), $tertiary);
+    color: dark-light-choose($secondary, $secondary);
+    font-weight: dark-light-choose(normal, bold);
   }
 
   &.new-topic {
@@ -268,9 +258,9 @@
 
   &.clicks {
     font-weight: normal;
-    background-color: #ddd;
+    background-color: dark-light-diff($primary, $secondary, 85%, -60%);
     top: -1px;
-    color: #888;
+    color: dark-light-diff($primary, $secondary, 50%, -20%);
     position: relative;
     margin-left: 2px;
     border: none;
@@ -285,7 +275,7 @@
   font-size: 1em;
   line-height: 1;
   &[href] {
-    color: scale-color($primary, $lightness: 40%);
+    color: dark-light-choose(scale-color($primary, $lightness: 40%), scale-color($secondary, $lightness: 60%));
   }
 }
 

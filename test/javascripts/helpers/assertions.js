@@ -1,4 +1,4 @@
-/* exported exists, count, present, blank, containsInstance, not, visible */
+/* exported exists, count, present, blank, containsInstance, not, visible, invisible */
 
 function exists(selector) {
   return !!count(selector);
@@ -6,14 +6,6 @@ function exists(selector) {
 
 function count(selector) {
   return find(selector).length;
-}
-
-function present(obj, text) {
-  ok(!Ember.isEmpty(obj), text);
-}
-
-function blank(obj, text) {
-  ok(Ember.isEmpty(obj), text);
 }
 
 function containsInstance(collection, klass, text) {

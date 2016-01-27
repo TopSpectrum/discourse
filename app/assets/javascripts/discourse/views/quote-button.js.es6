@@ -1,4 +1,4 @@
-export default Discourse.View.extend({
+export default Ember.View.extend({
   classNames: ['quote-button'],
   classNameBindings: ['visible'],
   isMouseDown: false,
@@ -26,6 +26,18 @@ export default Discourse.View.extend({
     const controller = this.get('controller'),
           view = this;
 
+    var onSelectionChanged = function() {
+      view.selectText(window.getSelection().anchorNode, controller);
+    };
+
+    // Windows Phone hack, it is not firing the touch events
+    // best we can do is debounce this so we dont keep locking up
+    // the selection when we add the caret to measure where we place
+    // the quote reply widget
+    if (navigator.userAgent.match(/Windows Phone/)) {
+      onSelectionChanged = _.debounce(onSelectionChanged, 500);
+    }
+
     $(document)
       .on("mousedown.quote-button", function(e) {
         view.set('isMouseDown', true);
@@ -38,7 +50,9 @@ export default Discourse.View.extend({
 
         // deselects only when the user left click
         // (allows anyone to `extend` their selection using shift+click)
-        if (e.which === 1 && !e.shiftKey) controller.deselectText();
+        if (!window.getSelection().isCollapsed &&
+            e.which === 1 &&
+            !e.shiftKey) controller.deselectText();
       })
       .on('mouseup.quote-button', function(e) {
         view.selectText(e.target, controller);
@@ -55,7 +69,7 @@ export default Discourse.View.extend({
         // or if there a touch in progress
         if (view.get('isMouseDown') || view.get('isTouchInProgress')) return;
         // `selection.anchorNode` is used as a target
-        view.selectText(window.getSelection().anchorNode, controller);
+        onSelectionChanged();
       });
   },
 
@@ -64,7 +78,7 @@ export default Discourse.View.extend({
     // breaks if quoting has been disabled by the user
     if (!Discourse.User.currentProp('enable_quoting')) return;
     // retrieve the post id from the DOM
-    const postId = $target.closest('.boxed').data('post-id');
+    const postId = $target.closest('.boxed, .reply').data('post-id');
     // select the text
     if (postId) controller.selectText(postId);
   },

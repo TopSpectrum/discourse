@@ -1,10 +1,18 @@
-/**
-  General utility functions
 
-  @class Utilities
-  @namespace Discourse
-  @module Discourse
-**/
+var discourseEscape = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#x27;",
+  '`': '&#x60;'
+};
+var discourseBadChars = /[&<>"'`]/g;
+var discoursePossible = /[&<>"'`]/;
+
+function discourseEscapeChar(chr) {
+  return discourseEscape[chr];
+}
 Discourse.Utilities = {
 
   translateSize: function(size) {
@@ -31,6 +39,28 @@ Discourse.Utilities = {
     }
   },
 
+  // Handlebars no longer allows spaces in its `escapeExpression` code which makes it
+  // unsuitable for many of Discourse's uses. Use `Handlebars.Utils.escapeExpression`
+  // when escaping an attribute in HTML, otherwise this one will do.
+  escapeExpression: function(string) {
+    // don't escape SafeStrings, since they're already safe
+    if (string instanceof Handlebars.SafeString) {
+      return string.toString();
+    } else if (string == null) {
+      return "";
+    } else if (!string) {
+      return string + '';
+    }
+
+    // Force a string conversion as this will be done by the append regardless and
+    // the regex test will do this transparently behind the scenes, causing issues if
+    // an object's to string has escaped characters in it.
+    string = "" + string;
+
+    if(!discoursePossible.test(string)) { return string; }
+    return string.replace(discourseBadChars, discourseEscapeChar);
+  },
+
   avatarUrl: function(template, size) {
     if (!template) { return ""; }
     var rawSize = Discourse.Utilities.getRawSize(Discourse.Utilities.translateSize(size));
@@ -39,7 +69,7 @@ Discourse.Utilities = {
 
   getRawSize: function(size) {
     var pixelRatio = window.devicePixelRatio || 1;
-    return pixelRatio >= 1.5 ? size * 2 : size;
+    return size * Math.min(3, Math.max(1, Math.round(pixelRatio)));
   },
 
   avatarImg: function(options) {
@@ -51,7 +81,8 @@ Discourse.Utilities = {
 
     var classes = "avatar" + (options.extraClasses ? " " + options.extraClasses : "");
     var title = (options.title) ? " title='" + Handlebars.Utils.escapeExpression(options.title || "") + "'" : "";
-    return "<img alt='' width='" + size + "' height='" + size + "' src='" + url + "' class='" + classes + "'" + title + ">";
+
+    return "<img alt='' width='" + size + "' height='" + size + "' src='" + Discourse.getURLWithCDN(url) + "' class='" + classes + "'" + title + ">";
   },
 
   tinyAvatar: function(avatarTemplate, options) {
@@ -103,7 +134,10 @@ Discourse.Utilities = {
     // Strip out any .click elements from the HTML before converting it to text
     var div = document.createElement('div');
     div.innerHTML = html;
-    $('.clicks', $(div)).remove();
+    var $div = $(div);
+    // Find all emojis and replace with its title attribute.
+    $div.find('img.emoji').replaceWith(function() { return this.title; });
+    $('.clicks', $div).remove();
     var text = div.textContent || div.innerText || "";
 
     return String(text).trim();
@@ -183,34 +217,14 @@ Discourse.Utilities = {
       }
     }
 
-    // check file size
-    var fileSizeKB = file.size / 1024;
-    var maxSizeKB = Discourse.SiteSettings['max_' + type + '_size_kb'];
-    if (fileSizeKB > maxSizeKB) {
-      bootbox.alert(I18n.t('post.errors.file_too_large', { max_size_kb: maxSizeKB }));
-      return false;
-    }
-
     // everything went fine
     return true;
   },
 
-
-  /**
-    Determine whether all file extensions are authorized.
-
-    @method authorizesAllExtensions
-  **/
   authorizesAllExtensions: function() {
     return Discourse.SiteSettings.authorized_extensions.indexOf("*") >= 0;
   },
 
-  /**
-    Check the extension of the file against the list of authorized extensions
-
-    @method isAuthorizedUpload
-    @param {File} file The file we want to upload
-  **/
   isAuthorizedUpload: function(file) {
     if (file && file.name) {
       var extensions = _.chain(Discourse.SiteSettings.authorized_extensions.split("|"))
@@ -222,11 +236,6 @@ Discourse.Utilities = {
     return false;
   },
 
-  /**
-    List the authorized extension for display
-
-    @method authorizedExtensions
-  **/
   authorizedExtensions: function() {
     return _.chain(Discourse.SiteSettings.authorized_extensions.split("|"))
             .reject(function(extension) { return extension.indexOf("*") >= 0; })
@@ -235,12 +244,6 @@ Discourse.Utilities = {
             .join(", ");
   },
 
-  /**
-    Get the markdown template for an upload (either an image or an attachment)
-
-    @method getUploadMarkdown
-    @param {Upload} upload The upload we want the markdown from
-  **/
   getUploadMarkdown: function(upload) {
     if (Discourse.Utilities.isAnImage(upload.original_filename)) {
       return '<img src="' + upload.url + '" width="' + upload.width + '" height="' + upload.height + '">';
@@ -249,12 +252,10 @@ Discourse.Utilities = {
     }
   },
 
-  /**
-    Check whether the path is refering to an image
+  getUploadPlaceholder: function() {
+    return "[" + I18n.t("uploading") + "]() ";
+  },
 
-    @method isAnImage
-    @param {String} path The path
-  **/
   isAnImage: function(path) {
     return (/\.(png|jpe?g|gif|bmp|tiff?|svg|webp)$/i).test(path);
   },
@@ -264,11 +265,6 @@ Discourse.Utilities = {
            (/(png|jpe?g|gif|bmp|tiff?|svg|webp)/i).test(Discourse.Utilities.authorizedExtensions());
   },
 
-  /**
-    Determines whether we allow attachments or not
-
-    @method allowsAttachments
-  **/
   allowsAttachments: function() {
     return Discourse.Utilities.authorizesAllExtensions() ||
            !(/((png|jpe?g|gif|bmp|tiff?|svg|webp)(,\s)?)+$/i).test(Discourse.Utilities.authorizedExtensions());
@@ -283,7 +279,7 @@ Discourse.Utilities = {
 
         // entity too large, usually returned from the web server
         case 413:
-          var maxSizeKB = Discourse.SiteSettings.max_image_size_kb;
+          var maxSizeKB = 10 * 1024; // 10 MB
           bootbox.alert(I18n.t('post.errors.file_too_large', { max_size_kb: maxSizeKB }));
           return;
 
@@ -296,58 +292,12 @@ Discourse.Utilities = {
           }
           return;
       }
+    } else if (data.errors && data.errors.length > 0) {
+      bootbox.alert(data.errors.join("\n"));
+      return;
     }
     // otherwise, display a generic error message
     bootbox.alert(I18n.t('post.errors.upload'));
-  },
-
-  /**
-    Crop an image to be used as avatar.
-    Simulate the "centered square thumbnail" generation done server-side.
-    Uses only the first frame of animated gifs when they are disabled.
-
-    @method cropAvatar
-    @param {String} url The url of the avatar
-    @param {String} fileType The file type of the uploaded file
-    @returns {Promise} a promise that will eventually be the cropped avatar.
-  **/
-  cropAvatar: function(url, fileType) {
-    if (Discourse.SiteSettings.allow_animated_avatars && fileType === "image/gif") {
-      // can't crop animated gifs... let the browser stretch the gif
-      return Ember.RSVP.resolve(url);
-    } else {
-      return new Ember.RSVP.Promise(function(resolve) {
-        var image = document.createElement("img");
-        image.crossOrigin = 'Anonymous';
-        // this event will be fired as soon as the image is loaded
-        image.onload = function(e) {
-          var img = e.target;
-          // computes the dimension & position (x, y) of the largest square we can fit in the image
-          var width = img.width, height = img.height, dimension, center, x, y;
-          if (width <= height) {
-            dimension = width;
-            center = height / 2;
-            x = 0;
-            y = center - (dimension / 2);
-          } else {
-            dimension = height;
-            center = width / 2;
-            x = center - (dimension / 2);
-            y = 0;
-          }
-          // set the size of the canvas to the maximum available size for avatars (browser will take care of downsizing the image)
-          var canvas = document.createElement("canvas");
-          var size = Discourse.Utilities.getRawSize(Discourse.Utilities.translateSize("huge"));
-          canvas.height = canvas.width = size;
-          // draw the image into the canvas
-          canvas.getContext("2d").drawImage(img, x, y, dimension, dimension, 0, 0, size, size);
-          // retrieve the image from the canvas
-          resolve(canvas.toDataURL(fileType));
-        };
-        // launch the onload event
-        image.src = url;
-      });
-    }
   },
 
   defaultHomepage: function() {

@@ -24,8 +24,9 @@ module Email
 
     attr_reader :body, :email_log
 
-    def initialize(raw)
+    def initialize(raw, opts=nil)
       @raw = raw
+      @opts = opts || {}
     end
 
     def process
@@ -135,6 +136,8 @@ module Email
         body = fix_charset message
       end
 
+      return body if @opts[:skip_sanity_check]
+
       # Certain trigger phrases that means we didn't parse correctly
       if body =~ /Content\-Type\:/ || body =~ /multipart\/alternative/ || body =~ /text\/plain/
         raise EmptyEmailError
@@ -152,6 +155,8 @@ module Email
       else
         object.body.to_s
       end
+    rescue
+      nil
     end
 
     REPLYING_HEADER_LABELS = ['From', 'Sent', 'To', 'Subject', 'Reply To', 'Cc', 'Bcc', 'Date']

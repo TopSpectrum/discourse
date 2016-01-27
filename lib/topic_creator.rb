@@ -1,6 +1,9 @@
 require_dependency 'has_errors'
 
 class TopicCreator
+
+  attr_reader :user, :guardian, :opts
+
   include HasErrors
 
   def self.create(user, guardian, opts)
@@ -16,11 +19,21 @@ class TopicCreator
 
   def valid?
     topic = Topic.new(setup_topic_params)
-    validate_child(topic)
+    # validate? will clear the error hash
+    # so we fire the validation event after
+    # this allows us to add errors
+    valid = topic.valid?
+    DiscourseEvent.trigger(:after_validate_topic, topic, self)
+    valid &&= topic.errors.empty?
+
+    add_errors_from(topic) unless valid
+
+    valid
   end
 
   def create
     topic = Topic.new(setup_topic_params)
+    DiscourseEvent.trigger(:before_create_topic, topic, self)
 
     setup_auto_close_time(topic)
     process_private_message(topic)
@@ -73,6 +86,10 @@ class TopicCreator
       topic_params[key] = @opts[key] if @opts[key].present?
     end
 
+    if topic_params[:import_mode] && @opts[:views].to_i > 0
+      topic_params[:views] = @opts[:views].to_i
+    end
+
     # Automatically give it a moderator warning subtype if specified
     topic_params[:subtype] = TopicSubtype.moderator_warning if @opts[:is_warning]
 
@@ -107,7 +124,7 @@ class TopicCreator
   def setup_auto_close_time(topic)
     return unless @opts[:auto_close_time].present?
     return unless @guardian.can_moderate?(topic)
-    topic.set_auto_close(@opts[:auto_close_time], @user)
+    topic.set_auto_close(@opts[:auto_close_time], {by_user: @user})
   end
 
   def process_private_message(topic)

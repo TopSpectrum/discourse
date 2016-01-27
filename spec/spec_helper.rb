@@ -112,7 +112,7 @@ Spork.prefork do
       # very expensive IO operations
       SiteSetting.automatically_download_gravatars = false
 
-      DiscourseRedis.clear_readonly!
+      Discourse.clear_readonly!
 
       I18n.locale = :en
     end
@@ -144,7 +144,6 @@ Spork.prefork do
     FileUtils.cp("#{Rails.root}/spec/fixtures/images/#{filename}", "#{Rails.root}/tmp/spec/#{filename}")
     File.new("#{Rails.root}/tmp/spec/#{filename}")
   end
-
 end
 
 Spork.each_run do

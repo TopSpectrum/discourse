@@ -13,6 +13,7 @@ class DiscoursePluginRegistry
     attr_writer :sass_variables
     attr_writer :handlebars
     attr_writer :serialized_current_user_fields
+    attr_writer :seed_data
 
     attr_accessor :custom_html
 
@@ -56,6 +57,10 @@ class DiscoursePluginRegistry
     def serialized_current_user_fields
       @serialized_current_user_fields ||= Set.new
     end
+
+    def seed_data
+      @seed_data ||= HashWithIndifferentAccess.new({})
+    end
   end
 
   def register_js(filename, options={})
@@ -72,8 +77,26 @@ class DiscoursePluginRegistry
     Archetype.register(name, options)
   end
 
-  def self.register_glob(root, extension)
-    self.asset_globs << [root, extension]
+  def self.register_glob(root, extension, options=nil)
+    self.asset_globs << [root, extension, options || {}]
+  end
+
+  def self.each_globbed_asset(each_options=nil)
+    each_options ||= {}
+
+    self.asset_globs.each do |g|
+      root, ext, options = *g
+
+      if options[:admin]
+        next unless each_options[:admin]
+      else
+        next if each_options[:admin]
+      end
+
+      Dir.glob("#{root}/**/*") do |f|
+        yield f, ext
+      end
+    end
   end
 
   def self.register_asset(asset, opts=nil)
@@ -102,6 +125,10 @@ class DiscoursePluginRegistry
     elsif asset =~ /\.js\.handlebars$/
       self.handlebars << asset
     end
+  end
+
+  def self.register_seed_data(key, value)
+    self.seed_data[key] = value
   end
 
   def javascripts

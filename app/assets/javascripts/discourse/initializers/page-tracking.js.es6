@@ -1,19 +1,40 @@
-/**
-  Sets up the PageTracking hook.
-**/
+import { cleanDOM } from 'discourse/routes/discourse';
+import PageTracker from 'discourse/lib/page-tracker';
+
 export default {
   name: "page-tracking",
-  after: 'register-discourse-location',
 
-  initialize: function(container) {
+  initialize(container) {
+
+    const cache = {};
+    var transitionCount = 0;
 
     // Tell our AJAX system to track a page transition
-    var router = container.lookup('router:main');
+    const router = container.lookup('router:main');
     router.on('willTransition', function() {
       Discourse.viewTrackingRequired();
     });
 
-    var pageTracker = Discourse.PageTracker.current();
+    router.on('didTransition', function() {
+      Em.run.scheduleOnce('afterRender', Ember.Route, cleanDOM);
+      transitionCount++;
+      _.each(cache, (v,k) => {
+        if (v && v.target && v.target < transitionCount) {
+           delete cache[k];
+        }
+      });
+    });
+
+
+    router.transientCache = function(key, data, count) {
+      if (data === undefined) {
+        return cache[key];
+      } else {
+        return cache[key] = {data, target: transitionCount + count};
+      }
+    };
+
+    const pageTracker = PageTracker.current();
     pageTracker.start();
 
     // Out of the box, Discourse tries to track google analytics

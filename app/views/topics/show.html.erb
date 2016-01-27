@@ -1,17 +1,23 @@
-<h2>
+<h1>
   <%= render_topic_title(@topic_view.topic) %>
-</h2>
+</h1>
 
-<div itemscope itemtype='http://schema.org/BreadcrumbList'>
-  <% categories_breadcrumb(@topic_view.topic).each_with_index do |c,i| %>
-    <span itemprop='itemListElement' itemscope itemtype='http://schema.org/ListItem'>
-      <%= link_to c[:url], itemprop: 'item' do %>
-        <span itemprop='name'><%= c[:name] %></span>
-      <% end %>
-    </span>
-    <meta itemprop='position' content='<%= i + 1 %>'>
+<% @breadcrumbs = categories_breadcrumb(@topic_view.topic)
+    if @breadcrumbs.present? %>
+<div id='breadcrumbs'>
+  <% @breadcrumbs.each_with_index do |c,i| %>
+    <div id="breadcrumb-<%=i%>" itemscope itemtype="http://data-vocabulary.org/Breadcrumb"
+      <%-if (i+1) < @breadcrumbs.length%>
+        itemref="breadcrumb-<%=(i+1)%>"
+      <%-end%>>
+      <a href="<%=c[:url]%>" itemprop="url">
+        <span itemprop="title"><%=c[:name]%></span>
+      </a>
+    </div>
   <% end %>
 </div>
+<% end %>
+<%= server_plugin_outlet "topic_header" %>
 <hr>
 
 <% @topic_view.posts.each do |post| %>
@@ -19,7 +25,7 @@
     <% if (u = post.user) %>
       <div class='creator'>
         <span>
-          <a href='/users/<%= u.username %>'><b itemprop='author'><%= u.username %></b></a>
+          <a href='<%= Discourse.base_uri %>/users/<%= u.username %>'><b itemprop='author'><%= u.username %></b></a>
            <%= "(#{u.name})" if (SiteSetting.display_name_on_posts && SiteSetting.enable_names? && !u.name.blank?) %>
            <time datetime='<%= post.created_at.to_formatted_s(:iso8601) %>' itemprop='datePublished'>
              <%= post.created_at %>
@@ -55,4 +61,4 @@
                           image: @topic_view.image_url) %>
 <% end %>
 
-<% content_for(:title) { @topic_view.title } %>
+<% content_for(:title) { "#{@topic_view.page_title}" } %>

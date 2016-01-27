@@ -38,7 +38,7 @@ class Admin::UsersController < Admin::AdminController
 
   def show
     @user = User.find_by(username_lower: params[:id])
-    raise Discourse::NotFound.new unless @user
+    raise Discourse::NotFound unless @user
     render_serialized(@user, AdminDetailedUserSerializer, root: false)
   end
 
@@ -53,8 +53,9 @@ class Admin::UsersController < Admin::AdminController
     @user.suspended_till = params[:duration].to_i.days.from_now
     @user.suspended_at = DateTime.now
     @user.save!
+    @user.revoke_api_key
     StaffActionLogger.new(current_user).log_user_suspend(@user, params[:reason])
-    DiscourseBus.publish "/logout", @user.id, user_ids: [@user.id]
+    MessageBus.publish "/logout", @user.id, user_ids: [@user.id]
     render nothing: true
   end
 
@@ -71,7 +72,7 @@ class Admin::UsersController < Admin::AdminController
     if @user
       @user.auth_token = nil
       @user.save!
-      DiscourseBus.publish "/logout", @user.id, user_ids: [@user.id]
+      MessageBus.publish "/logout", @user.id, user_ids: [@user.id]
       render json: success_json
     else
       render json: {error: I18n.t('admin_js.admin.users.id_not_found')}, status: 404
@@ -166,7 +167,7 @@ class Admin::UsersController < Admin::AdminController
 
     new_lock = params[:locked].to_s
     unless new_lock =~ /true|false/
-      return render_json_error I18n.t('errors.invalid_boolaen')
+      return render_json_error I18n.t('errors.invalid_boolean')
     end
 
     @user.trust_level_locked = new_lock == "true"
@@ -350,7 +351,7 @@ class Admin::UsersController < Admin::AdminController
     end
 
     def refresh_browser(user)
-      DiscourseBus.publish "/file-change", ["refresh"], user_ids: [user.id]
+      MessageBus.publish "/file-change", ["refresh"], user_ids: [user.id]
     end
 
 end

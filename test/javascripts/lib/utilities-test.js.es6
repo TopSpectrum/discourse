@@ -1,3 +1,5 @@
+import { blank } from 'helpers/qunit-helpers';
+
 module("Discourse.Utilities");
 
 var utils = Discourse.Utilities;
@@ -49,17 +51,6 @@ test("ensures an authorized upload", function() {
   ok(bootbox.alert.calledWith(I18n.t('post.errors.upload_not_authorized', { authorized_extensions: extensions })));
 });
 
-test("prevents files that are too big from being uploaded", function() {
-  Discourse.User.resetCurrent(Discourse.User.create());
-  var image = { name: "image.png", size: 10 * 1024 };
-  Discourse.SiteSettings.max_image_size_kb = 5;
-  Discourse.User.currentProp("trust_level", 1);
-  sandbox.stub(bootbox, "alert");
-
-  not(validUpload([image]));
-  ok(bootbox.alert.calledWith(I18n.t('post.errors.file_too_large', { max_size_kb: 5 })));
-});
-
 var imageSize = 10 * 1024;
 
 var dummyBlob = function() {
@@ -76,8 +67,6 @@ var dummyBlob = function() {
 test("allows valid uploads to go through", function() {
   Discourse.User.resetCurrent(Discourse.User.create());
   Discourse.User.currentProp("trust_level", 1);
-  Discourse.SiteSettings.max_image_size_kb = 15;
-  Discourse.SiteSettings.max_attachment_size_kb = 1;
   sandbox.stub(bootbox, "alert");
 
   // image
@@ -117,15 +106,15 @@ test("isAnImage", function() {
 });
 
 test("avatarUrl", function() {
-  var rawSize = Discourse.Utilities.getRawSize;
+  var rawSize = utils.getRawSize;
   blank(utils.avatarUrl('', 'tiny'), "no template returns blank");
   equal(utils.avatarUrl('/fake/template/{size}.png', 'tiny'), "/fake/template/" + rawSize(20) + ".png", "simple avatar url");
   equal(utils.avatarUrl('/fake/template/{size}.png', 'large'), "/fake/template/" + rawSize(45) +  ".png", "different size");
 });
 
 var setDevicePixelRatio = function(value) {
-  if(Object.defineProperty) {
-    Object.defineProperty(window, "devicePixelRatio", { value: 2 })
+  if (Object.defineProperty && !window.hasOwnProperty('devicePixelRatio')) {
+    Object.defineProperty(window, "devicePixelRatio", { value: 2 });
   } else {
     window.devicePixelRatio = value;
   }
@@ -168,17 +157,4 @@ test("allowsAttachments", function() {
 test("defaultHomepage", function() {
   Discourse.SiteSettings.top_menu = "latest|top|hot";
   equal(utils.defaultHomepage(), "latest", "default homepage is the first item in the top_menu site setting");
-});
-
-module("Discourse.Utilities.cropAvatar with animated avatars", {
-  setup: function() { Discourse.SiteSettings.allow_animated_avatars = true; }
-});
-
-asyncTestDiscourse("cropAvatar", function() {
-  expect(1);
-
-  utils.cropAvatar("/path/to/avatar.gif", "image/gif").then(function(avatarTemplate) {
-    equal(avatarTemplate, "/path/to/avatar.gif", "returns the url to the gif when animated gif are enabled");
-    start();
-  });
 });

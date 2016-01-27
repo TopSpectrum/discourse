@@ -8,7 +8,6 @@ require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 BB_PRESS_DB = ENV['BBPRESS_DB'] || "bbpress"
 DB_TABLE_PREFIX = "wp_"
 
-
 class ImportScripts::Bbpress < ImportScripts::Base
 
   def initialize
@@ -85,6 +84,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
                    OFFSET #{offset}", cache_rows: false)
 
       break if results.size < 1
+
+      next if all_records_exist? :posts, results.map {|p| p["id"].to_i}
 
       create_posts(results, total: total_count, offset: offset) do |post|
         skip = false

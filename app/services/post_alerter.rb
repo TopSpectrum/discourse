@@ -7,28 +7,30 @@ class PostAlerter
     post
   end
 
+  def allowed_users(post)
+    post.topic.all_allowed_users.reject do |user|
+      user.blank? ||
+      user.id == Discourse::SYSTEM_USER_ID ||
+      user.id == post.user_id
+    end
+  end
+
   def after_create_post(post)
     if post.topic.private_message?
       # If it's a private message, notify the topic_allowed_users
-      post.topic.all_allowed_users.reject do |user|
-        user.blank? ||
-        user.id == Discourse::SYSTEM_USER_ID ||
-        user.id == post.user_id
-      end.each do |user|
+      allowed_users(post).each do |user|
         if TopicUser.get(post.topic, user).try(:notification_level) == TopicUser.notification_levels[:tracking]
           next unless post.reply_to_post_number || post.reply_to_post.try(:user_id) == user.id
         end
         create_notification(user, Notification.types[:private_message], post)
       end
-    elsif post.post_type != Post.types[:moderator_action]
+    elsif post.post_type == Post.types[:regular]
       # If it's not a private message and it's not an automatic post caused by a moderator action, notify the users
       notify_post_users(post)
     end
   end
 
   def after_save_post(post)
-    return if post.topic.private_message?
-
     mentioned_users = extract_mentioned_users(post)
     quoted_users = extract_quoted_users(post)
     linked_users = extract_linked_users(post)
@@ -49,7 +51,8 @@ class PostAlerter
   end
 
   def unread_posts(user, topic)
-    Post.where('post_number > COALESCE((
+    Post.secured(Guardian.new(user))
+        .where('post_number > COALESCE((
                SELECT last_read_post_number FROM topic_users tu
                WHERE tu.user_id = ? AND tu.topic_id = ? ),0)',
                 user.id, topic.id)
@@ -80,6 +83,10 @@ class PostAlerter
     user.reload
   end
 
+  NOTIFIABLE_TYPES = [:mentioned, :replied, :quoted, :posted, :linked, :private_message].map{ |t|
+    Notification.types[t]
+  }
+
   def create_notification(user, type, post, opts={})
     return if user.blank?
     return if user.id == Discourse::SYSTEM_USER_ID
@@ -101,9 +108,11 @@ class PostAlerter
     # Don't notify the same user about the same notification on the same post
     existing_notification = user.notifications
                                 .order("notifications.id desc")
-                                .find_by(notification_type: type, topic_id: post.topic_id, post_number: post.post_number)
+                                .find_by(topic_id: post.topic_id,
+                                         post_number: post.post_number,
+                                         notification_type: type)
 
-    if existing_notification
+    if existing_notification && existing_notification.notification_type == type
        return unless existing_notification.notification_type == Notification.types[:edited] &&
                      existing_notification.data_hash["display_username"] = opts[:display_username]
     end
@@ -143,6 +152,24 @@ class PostAlerter
                                       original_post_id: original_post.id,
                                       original_username: original_username,
                                       display_username: opts[:display_username] || post.user.username }.to_json)
+
+   if (!existing_notification) && NOTIFIABLE_TYPES.include?(type)
+
+     # we may have an invalid post somehow, dont blow up
+     post_url = original_post.url rescue nil
+     if post_url
+        MessageBus.publish("/notification-alert/#{user.id}", {
+          notification_type: type,
+          post_number: original_post.post_number,
+          topic_title: original_post.topic.title,
+          topic_id: original_post.topic.id,
+          excerpt: original_post.excerpt(400, text_entities: true, strip_links: true),
+          username: original_username,
+          post_url: post_url
+        }, user_ids: [user.id])
+     end
+   end
+
   end
 
   # TODO: Move to post-analyzer?
@@ -172,6 +199,12 @@ class PostAlerter
   # Notify a bunch of users
   def notify_users(users, type, post)
     users = [users] unless users.is_a?(Array)
+
+    if post.topic.private_message?
+      whitelist = allowed_users(post)
+      users.reject! {|u| !whitelist.include?(u)}
+    end
+
     users.each do |u|
       create_notification(u, Notification.types[type], post)
     end
