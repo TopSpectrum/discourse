@@ -11,8 +11,10 @@ Discourse::Application.load_tasks
 Rake::Task["db:structure:dump"].clear if Rails.env.production?
 
 begin
-  require 'vlad'
-  Vlad.load :scm => :git
+  	require 'vlad'
+  	Vlad.load scm: :git
 rescue LoadError
-  # do nothing
+    re = RuntimeError.new e.message
+	re.backtrace = e.backtrace
+	raise re
 end
