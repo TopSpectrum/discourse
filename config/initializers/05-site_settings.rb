@@ -5,7 +5,7 @@
 # [jason] Had to disable this for massive multi-site since it would iterate through every
 # site on startup
 puts "Bypassing 05-site_settings.rb"
-
+puts "DOTFEEDBACK_DATABASE_HOST = #{ENV['DOTFEEDBACK_DATABASE_HOST']}"
 =begin
   Discourse.git_version
 

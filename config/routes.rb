@@ -44,7 +44,12 @@ Discourse::Application.routes.draw do
   resources :forums
   get "srv/status" => "forums#status"
 
+  namespace :dotfeedback do
+    resources :site
+  end
+
   namespace :admin, constraints: StaffConstraint.new do
+
     get "" => "admin#index"
 
     get 'plugins' => 'plugins#index'
