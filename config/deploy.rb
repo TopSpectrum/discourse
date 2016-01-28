@@ -19,7 +19,7 @@ set :web, nil
 set :unicorn_config, "#{current_path}/config/unicorn.conf.rb"
 set :unicorn_use_bundler, true
 set :unicorn_bundle_cmd, "cd #{current_path} && rvm all do bundle exec"
-set :unicorn_env, "develop"
+set :unicorn_env, "development"
 
 namespace :vlad do
   remote_task :bundle_install do
