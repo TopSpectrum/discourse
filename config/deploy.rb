@@ -20,7 +20,7 @@ namespace :vlad do
   end
 
   def start
-    run "foreman stop"
+    run "foreman start"
   end
 
   remote_task :start, roles: :app do
