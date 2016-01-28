@@ -17,3 +17,14 @@ set :revision, "origin/master"
 set :web, nil
 
 set :unicorn_config, "#{current_path}/config/unicorn.conf.rb"
+
+namespace :vlad do
+  remote_task :bundle_install do
+  	run "cd #{current_path} && bundle install"
+  end
+
+  remote_task :update do
+    Rake::Task["vlad:bundle_install"].invoke
+  end
+end
+
