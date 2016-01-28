@@ -33,6 +33,7 @@ namespace :vlad do
   end
 
   remote_task :update do
-    Rake::Task["vlad:start"].invoke
+  	p "Monkey"
+#    Rake::Task["vlad:start"].invoke
   end
 end
