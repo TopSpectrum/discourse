@@ -12,7 +12,7 @@ Rake::Task["db:structure:dump"].clear if Rails.env.production?
 
 begin
   	require 'vlad'
-  	Vlad.load(scm: :git, type: :rails)
+  	Vlad.load(scm: :git, type: :rails, app: :unicorn)
 rescue LoadError
     re = RuntimeError.new e.message
 	re.backtrace = e.backtrace
