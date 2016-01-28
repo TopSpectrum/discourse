@@ -14,26 +14,6 @@ set :deploy_to, "/srv/topspectrum/dotforum"
 set :repository, 'https://github.com/TopSpectrum/discourse.git'
 set :revision, "origin/master"
 
-namespace :vlad do
-  def stop
-    run "foreman stop"
-  end
+set :web, nil
 
-  def start
-    run "foreman start"
-  end
-
-  remote_task :start, roles: :app do
-    stop
-    start
-  end
-
-  remote_task :stop, roles: :app do
-    stop
-  end
-
-  remote_task :update do
-  	p "Monkey"
-#    Rake::Task["vlad:start"].invoke
-  end
-end
+set :unicorn_config, "#{current_path}/config/unicorn.conf.rb"

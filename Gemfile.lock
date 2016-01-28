@@ -395,8 +395,13 @@ GEM
     vlad (2.6.5)
       rake (>= 0.8, < 11.0)
       rake-remote_task (~> 2.3)
+    vlad-extras (0.7.3)
+      rake-remote_task (~> 2.1)
+      vlad (>= 2.2.4, < 3)
     vlad-git (2.2.0)
       vlad (>= 2.1.0)
+    vlad-unicorn (2.3.1)
+      vlad (~> 2.0)
 
 PLATFORMS
   ruby
@@ -496,7 +501,9 @@ DEPENDENCIES
   unf
   unicorn
   vlad
+  vlad-extras
   vlad-git
+  vlad-unicorn
 
 BUNDLED WITH
    1.10.6

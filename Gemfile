@@ -36,6 +36,8 @@ gem 'hiredis'
 gem 'redis', require:  ["redis", "redis/connection/hiredis"]
 gem 'vlad'
 gem 'vlad-git'
+gem 'vlad-extras', :require => false
+gem 'vlad-unicorn'
 
 gem 'active_model_serializers', '~> 0.8.3'
 
