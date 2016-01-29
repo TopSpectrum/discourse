@@ -28,8 +28,16 @@ namespace :vlad do
   	run "cd #{current_path} && rvm all do bundle install"
   end
 
+  remote_task :foreman_start do
+  	run "cd #{current_path} && rvm all do bundle exec foreman start"
+  end
+
   remote_task :update do
     Rake::Task["vlad:bundle_install"].invoke
+  end
+
+  remote_task :start_foreman do
+    Rake::Task["vlad:foreman_start"].invoke
   end
 end
 

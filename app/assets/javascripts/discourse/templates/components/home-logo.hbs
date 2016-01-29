@@ -14,6 +14,9 @@
       {{#if bigLogoUrl}}
         <span class="valign-helper"></span>
         <img id="site-logo" class="logo-big" src="{{unbound bigLogoUrl}}" alt="{{unbound title}}">
+        {{#if hostName}}
+          <span style="font-size:25px; vertical-align: bottom; line-height: 36px;">:{{hostName}}</span>
+        {{/if}}
       {{else}}
         <h2 id="site-text-logo" class="text-logo">{{unbound title}}</h2>
       {{/if}}

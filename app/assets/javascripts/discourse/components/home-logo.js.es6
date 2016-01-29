@@ -20,7 +20,7 @@ export default Ember.Component.extend({
   bigLogoUrl: setting('logo_url'),
   mobileBigLogoUrl: setting('mobile_logo_url'),
   title: setting('title'),
-
+  hostName: window.location.hostname.substring(0,10),
   click: function(e) {
     // if they want to open in a new tab, let it so
     if (e.shiftKey || e.metaKey || e.ctrlKey || e.which === 2) { return true; }

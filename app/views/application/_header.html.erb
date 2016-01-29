@@ -6,6 +6,7 @@
           <a href="<%= path "/" %>">
             <%- if application_logo_url.present? %>
               <img src="<%= application_logo_url %>" alt="<%= SiteSetting.title %>" id="site-logo">
+              <h2 id='site-text-logo'><%= request.host %></h2>
             <%- else %>
               <h2 id='site-text-logo'><%= SiteSetting.title %></h2>
             <%- end %>
