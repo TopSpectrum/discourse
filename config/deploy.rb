@@ -23,21 +23,16 @@ set :unicorn_env, "development"
 
 namespace :vlad do
   remote_task :bundle_install do
-  	# If this fails, it's because RVM isn't sourced at the top
-  	# of the ~/.bashrc file. Move it to the top
   	run "cd #{current_path} && rvm all do bundle install"
-  end
-
-  remote_task :foreman_start do
-  	run "cd #{current_path} && rvm all do bundle exec foreman start"
   end
 
   remote_task :update do
     Rake::Task["vlad:bundle_install"].invoke
   end
 
-  remote_task :start_foreman do
-    Rake::Task["vlad:foreman_start"].invoke
+  remote_task :deploy_full do
+  	Rake::Task["vlad:update"].invoke
+    Rake::Task["vlad:reload_app"].invoke
   end
 end
 

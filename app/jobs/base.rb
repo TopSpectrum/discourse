@@ -101,6 +101,10 @@ module Jobs
         end
       end
 
+      if args && !args.empty?
+        ap args
+      end
+
       if opts.delete(:sync_exec)
         if opts.has_key?(:current_site_id) && opts[:current_site_id] != RailsMultisite::ConnectionManagement.current_db
           raise ArgumentError.new("You can't connect to another database when executing a job synchronously.")
@@ -114,58 +118,32 @@ module Jobs
         end
       end
 
-
-      dbs =
-        if opts[:current_site_id]
-          [opts[:current_site_id]]
-        else
-          RailsMultisite::ConnectionManagement.all_dbs
-        end
+      dbs = opts[:current_site_id] ? [opts[:current_site_id]] : nil
+      dbs = ["localhost"] if dbs.nil?
 
       exceptions = []
+
       dbs.each do |db|
         begin
           thread_exception = {}
-          # NOTE: This looks odd, in fact it looks crazy but there is a reason
-          #  A bug in therubyracer means that under certain conditions running in a fiber
-          #  can cause the whole v8 context to corrupt so much that it will hang sidekiq
-          #
-          #  If you are brave and want to try to fix this either in celluloid or therubyracer, the repro is:
-          #
-          #  1. Create a big Discourse db: (you can start from script/profile_db_generator.rb)
-          #  2. Queue a ton of jobs, eg: User.pluck(:id).each{|id| Jobs.enqueue(:user_email, type: :digest, user_id: id)};
-          #  3. Run sidekiq
-          #
-          #  The issue only happens in Ruby 2.0 for some reason, you start getting V8::Error with no context
-          #
-          #  See: https://github.com/cowboyd/therubyracer/issues/206
-          #
-          #  The restricted stack space of fibers opens a bunch of risks up, by avoiding them altogether
-          #   we can mitigate giving up a very marginal amount of throughput
-          #
-          #  Ideally we could just tell sidekiq to avoid fibers
-
-          t = Thread.new do
+          begin
+            RailsMultisite::ConnectionManagement.establish_connection(db: db)
+            I18n.locale = SiteSetting.default_locale
+            I18n.fallbacks.ensure_loaded!
             begin
-              RailsMultisite::ConnectionManagement.establish_connection(db: db)
-              I18n.locale = SiteSetting.default_locale
-              I18n.fallbacks.ensure_loaded!
-              begin
-                execute(opts)
-              rescue => e
-                thread_exception[:ex] = e
-                thread_exception[:other] = { problem_db: db }
-              end
+              execute(opts)
             rescue => e
               thread_exception[:ex] = e
-              thread_exception[:message] = "While establishing database connection to #{db}"
               thread_exception[:other] = { problem_db: db }
-            ensure
-              ActiveRecord::Base.connection_handler.clear_active_connections!
-              total_db_time += Instrumenter.stats.duration_ms
             end
+          rescue => e
+            thread_exception[:ex] = e
+            thread_exception[:message] = "While establishing database connection to #{db}"
+            thread_exception[:other] = { problem_db: db }
+          ensure
+            ActiveRecord::Base.connection_handler.clear_active_connections!
+            total_db_time += Instrumenter.stats.duration_ms
           end
-          t.join
 
           exceptions << thread_exception unless thread_exception.empty?
         end
@@ -173,9 +151,9 @@ module Jobs
 
       if exceptions.length > 0
         exceptions.each do |exception_hash|
-          Discourse.handle_job_exception(exception_hash[:ex],
-                error_context(opts, exception_hash[:code], exception_hash[:other]))
+          Discourse.handle_job_exception(exception_hash[:ex], error_context(opts, exception_hash[:code], exception_hash[:other]))
         end
+
         raise HandledExceptionWrapper.new exceptions[0][:ex]
       end
 
@@ -209,12 +187,14 @@ module Jobs
 
     # If we are able to queue a job, do it
     if SiteSetting.queue_jobs?
+      p "ENQUEUE #{klass}:#{opts.inspect}"
       if opts[:delay_for].present?
         klass.delay_for(opts.delete(:delay_for)).delayed_perform(opts)
       else
         Sidekiq::Client.enqueue(klass, opts)
       end
     else
+      p "DELAYED-ENQUEUE #{klass}:#{opts.inspect}"
       # Otherwise execute the job right away
       opts.delete(:delay_for)
       opts[:sync_exec] = true

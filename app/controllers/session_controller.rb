@@ -1,4 +1,4 @@
-require_dependency 'rate_limiter'
+#require_dependency 'rate_limiter'
 require_dependency 'single_sign_on'
 
 class SessionController < ApplicationController
@@ -187,11 +187,12 @@ class SessionController < ApplicationController
 
     RateLimiter.new(nil, "forgot-password-hr-#{request.remote_ip}", 6, 1.hour).performed!
     RateLimiter.new(nil, "forgot-password-min-#{request.remote_ip}", 3, 1.minute).performed!
-
+    p "In reset"
     user = User.find_by_username_or_email(params[:login])
     user_presence = user.present? && user.id != Discourse::SYSTEM_USER_ID
     if user_presence
       email_token = user.email_tokens.create(email: user.email)
+      p "Enqueuing job"
       Jobs.enqueue(:user_email, type: :forgot_password, user_id: user.id, email_token: email_token.token)
     end
 

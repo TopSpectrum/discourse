@@ -34,6 +34,7 @@ GEM
       activerecord (>= 2.3.0)
       rake (~> 10.4.2, >= 10.4.2)
     arel (5.0.1.20140414130214)
+    awesome_print (1.2.0)
     aws-sdk (2.0.45)
       aws-sdk-resources (= 2.0.45)
     aws-sdk-core (2.0.45)
@@ -409,6 +410,7 @@ PLATFORMS
 DEPENDENCIES
   active_model_serializers (~> 0.8.3)
   annotate
+  awesome_print
   aws-sdk
   babel-transpiler
   barber

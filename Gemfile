@@ -35,6 +35,8 @@ gem 'mail', '~> 2.5.4'
 gem 'hiredis'
 gem 'redis', require:  ["redis", "redis/connection/hiredis"]
 gem 'vlad'
+gem 'awesome_print'
+
 gem 'vlad-git'
 gem 'vlad-extras', :require => false
 gem 'vlad-unicorn'
