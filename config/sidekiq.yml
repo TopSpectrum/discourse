@@ -1,0 +1,2 @@
+:concurrency: 3
+:pidfile: shared/pids/sidekiq.pid

@@ -1,3 +1,4 @@
+RVM_LOAD="source $HOME/.rvm/scripts/rvm"
 
 set :application, "dotforum"
 
@@ -6,7 +7,7 @@ unless key_location
 	p "You must have environment variable EC2_KEY set to location of ec2 key"
 	exit 1
 end
-set :ssh_flags, ["-i", "#{key_location}","-A"]
+set :ssh_flags, ["-i", "#{key_location}"]
 
 set :domain, "ubuntu@dotforum"
 set :deploy_to, "/srv/topspectrum/dotforum"
@@ -18,12 +19,25 @@ set :web, nil
 
 set :unicorn_config, "#{current_path}/config/unicorn.conf.rb"
 set :unicorn_use_bundler, true
-set :unicorn_bundle_cmd, "cd #{current_path} && rvm all do bundle exec"
+set :unicorn_bundle_cmd, "#{RVM_LOAD} && cd #{current_path} && bundle exec"
 set :unicorn_env, "development"
 
 namespace :vlad do
   remote_task :bundle_install do
-  	run "cd #{current_path} && rvm all do bundle install"
+  	run "#{RVM_LOAD} && cd #{current_path} && bundle install"
+  end
+
+  remote_task :stop_sidekiq do
+  	run "#{RVM_LOAD} && cd #{current_path} && bundle exec sidekiqctl stop #{current_path}/../shared/pids/sidekiq-worker.pid 5"
+  end
+
+  remote_task :start_sidekiq do
+  	run "#{RVM_LOAD} && cd #{current_path} && bundle exec sidekiq -d -L log/sidekiq.log -C config/sidekiq.yml"
+  end
+
+  remote_task :restart_sidekiq do
+  	Rake::Task["vlad:stop_sidekiq"].invoke
+  	Rake::Task["vlad:start_sidekiq"].invoke
   end
 
   remote_task :update do
@@ -33,6 +47,7 @@ namespace :vlad do
   remote_task :deploy_full do
   	Rake::Task["vlad:update"].invoke
     Rake::Task["vlad:reload_app"].invoke
+    Rake::Task["vlad:restart_sidekiq"].invoke
   end
 end
 
