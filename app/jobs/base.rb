@@ -180,8 +180,10 @@ module Jobs
   def self.enqueue(job_name, opts={})
     klass = "Jobs::#{job_name.to_s.camelcase}".constantize
 
+    p "enqueue-enqueue"
     # Unless we want to work on all sites
     unless opts.delete(:all_sites)
+      p "ENQUEUEDB #{RailsMultisite::ConnectionManagement.current_db} "
       opts[:current_site_id] ||= RailsMultisite::ConnectionManagement.current_db
     end
 
