@@ -1,2 +1,3 @@
 :concurrency: 3
+:verbose: true
 :pidfile: shared/pids/sidekiq.pid
