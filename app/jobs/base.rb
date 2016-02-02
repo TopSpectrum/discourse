@@ -180,23 +180,23 @@ module Jobs
   def self.enqueue(job_name, opts={})
     klass = "Jobs::#{job_name.to_s.camelcase}".constantize
 
-    p "enqueue-enqueue"
+    Rails.logger.error "enqueue-enqueue"
     # Unless we want to work on all sites
     unless opts.delete(:all_sites)
-      p "ENQUEUEDB #{RailsMultisite::ConnectionManagement.current_db} "
+      Rails.logger.error "ENQUEUEDB #{RailsMultisite::ConnectionManagement.current_db} "
       opts[:current_site_id] ||= RailsMultisite::ConnectionManagement.current_db
     end
 
     # If we are able to queue a job, do it
     if SiteSetting.queue_jobs?
-      p "ENQUEUE #{klass}:#{opts.inspect}"
+      Rails.logger.error "ENQUEUE #{klass}:#{opts.inspect}"
       if opts[:delay_for].present?
         klass.delay_for(opts.delete(:delay_for)).delayed_perform(opts)
       else
         Sidekiq::Client.enqueue(klass, opts)
       end
     else
-      p "DELAYED-ENQUEUE #{klass}:#{opts.inspect}"
+      Rails.logger.error "DELAYED-ENQUEUE #{klass}:#{opts.inspect}"
       # Otherwise execute the job right away
       opts.delete(:delay_for)
       opts[:sync_exec] = true
