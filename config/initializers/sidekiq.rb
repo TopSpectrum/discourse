@@ -58,7 +58,7 @@ class SidekiqLogsterReporter < Sidekiq::ExceptionHandler::Logger
       Logster.add_to_env(fake_env, key, value)
     end
 
-    text = "Job exception: #{ex}\n"
+    text = "Job exception: #{ex}\n #{ex.backtrace}"
     if ex.backtrace
       Logster.add_to_env(fake_env, :backtrace, ex.backtrace)
     end

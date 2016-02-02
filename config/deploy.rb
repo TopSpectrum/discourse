@@ -28,15 +28,24 @@ namespace :vlad do
   end
 
   remote_task :stop_sidekiq do
-  	run "#{RVM_LOAD} && cd #{current_path} && bundle exec sidekiqctl stop /srv/topspectrum/dotforum/shared/pids//sidekiq-worker.pid 5"
+  	run "#{RVM_LOAD} && cd #{current_path} && bundle exec sidekiqctl stop /srv/topspectrum/dotforum/shared/pids/sidekiq.pid 5"
   end
 
   remote_task :start_sidekiq do
-  	run "#{RVM_LOAD} && cd #{current_path} && bundle exec sidekiq -d -L #{current_path}/log/sidekiq.log -C #{current_path}/config/sidekiq.yml"
+  	run "#{RVM_LOAD} && cd #{current_path} && bundle exec sidekiq -d -L #{current_path}/log/sidekiq.log -C #{current_path}/config/sidekiq.yml -e development"
+  end
+
+  remote_task :delete_sidekiq_pid do
+  	run "rm /srv/topspectrum/dotforum/shared/pids/sidekiq.pid && exit 0"
   end
 
   remote_task :restart_sidekiq do
-  	Rake::Task["vlad:stop_sidekiq"].invoke
+  	begin
+	  	Rake::Task["vlad:stop_sidekiq"].invoke
+	rescue
+		# Invalid pid will cause failure, so lets delete and fail silently
+		Rake::Task["vlad:delete_sidekiq_pid"].invoke
+	end
   	sleep(5)
   	Rake::Task["vlad:start_sidekiq"].invoke
   end
