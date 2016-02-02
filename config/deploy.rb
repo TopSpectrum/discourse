@@ -28,7 +28,7 @@ namespace :vlad do
   end
 
   remote_task :stop_sidekiq do
-  	run "#{RVM_LOAD} && cd #{current_path} && bundle exec sidekiqctl stop #{current_path}/../shared/pids/sidekiq-worker.pid 5"
+  	run "#{RVM_LOAD} && cd #{current_path} && bundle exec sidekiqctl stop /srv/topspectrum/dotforum/shared/pids//sidekiq-worker.pid 5"
   end
 
   remote_task :start_sidekiq do
